@@ -1,0 +1,7 @@
+name = "radio-stream"
+main = "src/index.js"
+compatibility_date = "2025-09-11"
+
+[[r2_buckets]]
+bucket_name = "radio-music"
+binding = "MUSIC_BUCKET"

@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>24/7 Radio Stream</title>
+</head>
+<body>
+    <h1>24/7 Radio Stream</h1>
+    <audio controls autoplay>
+        <source src="/stream" type="audio/mpeg">
+        Your browser does not support the audio element.
+    </audio>
+    
+    <h2>Upload Songs</h2>
+    <form id="uploadForm" enctype="multipart/form-data">
+        <input type="file" name="audio" accept="audio/*" required>
+        <button type="submit">Upload</button>
+    </form>
+
+    <script>
+        document.getElementById('uploadForm').onsubmit = async (e) => {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            const response = await fetch('/upload', {
+                method: 'POST',
+                body: formData
+            });
+            alert(await response.text());
+            e.target.reset();
+        };
+    </script>
+</body>
+</html>
