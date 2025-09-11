@@ -14,10 +14,6 @@ export default {
       return handleUpload(request, env);
     }
     
-    if (url.pathname === '/list') {
-      return handleList(env);
-    }
-    
     return new Response(getPlayerHTML(), {
       headers: { 'Content-Type': 'text/html' }
     });
@@ -37,7 +33,6 @@ async function handleStream(env) {
     return new Response('Song not found', { status: 404 });
   }
   
-  // Store current song for now playing
   await env.MUSIC_BUCKET.put('__current_song', currentSong);
   
   return new Response(audioObject.body, {
@@ -53,7 +48,6 @@ async function handleNowPlaying(env) {
   const currentSongKey = await env.MUSIC_BUCKET.get('__current_song');
   const songName = currentSongKey ? await currentSongKey.text() : 'Unknown';
   
-  // Extract verse info from filename
   const verseInfo = extractVerseInfo(songName);
   
   return new Response(JSON.stringify({
@@ -69,10 +63,8 @@ async function handleNowPlaying(env) {
 }
 
 function extractVerseInfo(filename) {
-  // Remove timestamp and extension
   const cleaned = filename.replace(/^\d+-/, '').replace(/\.[^.]+$/, '');
   
-  // Try to extract bible book and verse patterns
   const bibleBooks = ['Genesis', 'Exodus', 'Leviticus', 'Numbers', 'Deuteronomy', 'Joshua', 'Judges', 'Ruth', 'Samuel', 'Kings', 'Chronicles', 'Ezra', 'Nehemiah', 'Esther', 'Job', 'Psalms', 'Proverbs', 'Ecclesiastes', 'Song', 'Isaiah', 'Jeremiah', 'Lamentations', 'Ezekiel', 'Daniel', 'Hosea', 'Joel', 'Amos', 'Obadiah', 'Jonah', 'Micah', 'Nahum', 'Habakkuk', 'Zephaniah', 'Haggai', 'Zechariah', 'Malachi', 'Matthew', 'Mark', 'Luke', 'John', 'Acts', 'Romans', 'Corinthians', 'Galatians', 'Ephesians', 'Philippians', 'Colossians', 'Thessalonians', 'Timothy', 'Titus', 'Philemon', 'Hebrews', 'James', 'Peter', 'Jude', 'Revelation'];
   
   for (const book of bibleBooks) {
@@ -94,29 +86,6 @@ function extractVerseInfo(filename) {
 }
 
 async function handleUpload(request, env) {
-  const auth = request.headers.get('Authorization');
-  if (!auth || auth !== `Bearer ${env.UPLOAD_SECRET}`) {
-    return new Response('Unauthorized', { status: 401 });
-  }
-  
-  const formData = await request.formData();
-  const file = formData.get('audio');
-  
-  if (!file) {
-    return new Response('No file provided', { status: 400 });
-  }
-  
-  const filename = `${Date.now()}-${file.name}`;
-  await env.MUSIC_BUCKET.put(filename, file.stream());
-  
-  return new Response(`Uploaded: ${filename}`);
-}
-  const objects = await env.MUSIC_BUCKET.list();
-  const files = objects.objects.filter(obj => !obj.key.startsWith('__')).map(obj => obj.key);
-  return new Response(JSON.stringify(files, null, 2), {
-    headers: { 'Content-Type': 'application/json' }
-  });
-}
   const auth = request.headers.get('Authorization');
   if (!auth || auth !== `Bearer ${env.UPLOAD_SECRET}`) {
     return new Response('Unauthorized', { status: 401 });
@@ -165,7 +134,6 @@ function getPlayerHTML() {
 </head>
 <body class="h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-indigo-900 font-sans overflow-hidden">
     <div class="h-screen flex flex-col items-center justify-center p-4 max-w-lg mx-auto">
-        <!-- Compact Header -->
         <div class="text-center mb-6">
             <div class="flex justify-center mb-3">
                 <div class="relative">
@@ -189,18 +157,25 @@ function getPlayerHTML() {
             </div>
         </div>
 
-        <!-- Player Card -->
         <div class="w-full bg-white/5 backdrop-blur-2xl border border-white/20 rounded-2xl shadow-2xl overflow-hidden">
-            <!-- Play Button First -->
             <div class="p-6 text-center">
-                <button id="playBtn" class="w-16 h-16 rounded-full bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700 transition-all duration-300 flex items-center justify-center shadow-2xl transform hover:scale-105 mx-auto mb-3">
-                    <i id="playIcon" data-lucide="play" class="w-6 h-6 text-white ml-1"></i>
-                    <i id="stopIcon" data-lucide="square" class="w-6 h-6 text-white hidden"></i>
-                </button>
+                <div class="flex justify-center items-center space-x-4 mb-3">
+                    <button id="prevBtn" class="w-12 h-12 rounded-full bg-gradient-to-r from-gray-500 to-gray-600 hover:from-gray-600 hover:to-gray-700 transition-all duration-300 flex items-center justify-center shadow-xl transform hover:scale-105">
+                        <i data-lucide="skip-back" class="w-5 h-5 text-white"></i>
+                    </button>
+                    
+                    <button id="playBtn" class="w-16 h-16 rounded-full bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700 transition-all duration-300 flex items-center justify-center shadow-2xl transform hover:scale-105">
+                        <i id="playIcon" data-lucide="play" class="w-6 h-6 text-white ml-1"></i>
+                        <i id="stopIcon" data-lucide="square" class="w-6 h-6 text-white hidden"></i>
+                    </button>
+                    
+                    <button id="nextBtn" class="w-12 h-12 rounded-full bg-gradient-to-r from-gray-500 to-gray-600 hover:from-gray-600 hover:to-gray-700 transition-all duration-300 flex items-center justify-center shadow-xl transform hover:scale-105">
+                        <i data-lucide="skip-forward" class="w-5 h-5 text-white"></i>
+                    </button>
+                </div>
                 <p id="status" class="text-white/90 text-sm font-medium">Press play to Hear the Word of God</p>
             </div>
 
-            <!-- Now Playing Section -->
             <div class="bg-gradient-to-r from-purple-600/20 via-indigo-600/20 to-blue-600/20 p-4 border-t border-white/10">
                 <div class="text-center">
                     <div class="flex justify-center mb-2">
@@ -215,7 +190,6 @@ function getPlayerHTML() {
                 </div>
             </div>
 
-            <!-- Stats -->
             <div class="p-3">
                 <div class="flex justify-center space-x-6 text-white/70 text-xs">
                     <div class="flex items-center space-x-1">
@@ -234,28 +208,81 @@ function getPlayerHTML() {
             </div>
         </div>
 
-        <!-- Footer -->
         <div class="mt-4 text-center text-white/60 text-xs">
             <p class="italic font-serif">"Let the word of Christ dwell in you richly"</p>
             <p class="text-white/50 mt-1">- Colossians 3:16</p>
         </div>
     </div>
 
-    <audio id="audio"></audio>
-
     <script>
-        // Initialize Lucide icons
         lucide.createIcons();
 
         const playBtn = document.getElementById('playBtn');
+        const prevBtn = document.getElementById('prevBtn');
+        const nextBtn = document.getElementById('nextBtn');
         const playIcon = document.getElementById('playIcon');
         const stopIcon = document.getElementById('stopIcon');
         const status = document.getElementById('status');
         const songTitle = document.getElementById('songTitle');
         const verseInfo = document.getElementById('verseInfo');
-        const audio = document.getElementById('audio');
+        
+        let audioContext;
+        let currentAudio = null;
+        let nextAudio = null;
+        let currentGain = null;
+        let nextGain = null;
         let isPlaying = false;
         let nowPlayingInterval;
+        let crossfadeTimeout = null;
+
+        // Initialize Web Audio Context
+        function initAudioContext() {
+            if (!audioContext) {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            return audioContext;
+        }
+
+        function createAudioElement() {
+            const audio = new Audio();
+            audio.crossOrigin = "anonymous";
+            return audio;
+        }
+
+        function connectAudioToContext(audio) {
+            const source = audioContext.createMediaElementSource(audio);
+            const gainNode = audioContext.createGain();
+            source.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+            return { source, gainNode };
+        }
+
+        function crossfade(fromGain, toGain, duration = 3000) {
+            const steps = 60; // 60 steps for smooth fade
+            const stepTime = duration / steps;
+            let step = 0;
+
+            const fadeInterval = setInterval(() => {
+                step++;
+                const progress = step / steps;
+                
+                // Fade out current song
+                if (fromGain) {
+                    fromGain.gain.value = Math.max(0, 1 - progress);
+                }
+                
+                // Fade in next song
+                if (toGain) {
+                    toGain.gain.value = Math.min(1, progress);
+                }
+
+                if (step >= steps) {
+                    clearInterval(fadeInterval);
+                    if (fromGain) fromGain.gain.value = 0;
+                    if (toGain) toGain.gain.value = 1;
+                }
+            }, stepTime);
+        }
 
         function updateNowPlaying() {
             fetch('/now-playing')
@@ -272,53 +299,143 @@ function getPlayerHTML() {
                 });
         }
 
-        playBtn.addEventListener('click', () => {
+        function playNewSong(crossfadeEnabled = true) {
+            initAudioContext();
+            
+            // Create new audio element
+            nextAudio = createAudioElement();
+            nextAudio.src = '/stream?' + Date.now();
+            
+            const { gainNode } = connectAudioToContext(nextAudio);
+            nextGain = gainNode;
+            
+            // Set up event listeners for this audio element
+            setupAudioListeners(nextAudio);
+            
+            // Start with volume at 0 for crossfade
+            if (crossfadeEnabled && currentAudio) {
+                nextGain.gain.value = 0;
+            } else {
+                nextGain.gain.value = 1;
+            }
+            
+            nextAudio.addEventListener('canplay', () => {
+                if (isPlaying) {
+                    nextAudio.play().then(() => {
+                        if (crossfadeEnabled && currentAudio && currentGain) {
+                            // Start crossfade
+                            crossfade(currentGain, nextGain, 3000);
+                            
+                            // Clean up old audio after fade
+                            setTimeout(() => {
+                                if (currentAudio) {
+                                    currentAudio.pause();
+                                    currentAudio.src = '';
+                                }
+                            }, 3000);
+                        }
+                        
+                        // Switch references
+                        currentAudio = nextAudio;
+                        currentGain = nextGain;
+                        nextAudio = null;
+                        nextGain = null;
+                        
+                        updateNowPlaying();
+                    }).catch(() => {
+                        status.textContent = 'Error loading stream';
+                    });
+                }
+            });
+            
+            nextAudio.load();
+        }
+
+        function setPlayingState() {
+            playBtn.className = 'w-16 h-16 rounded-full bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 transition-all duration-300 flex items-center justify-center shadow-2xl transform hover:scale-105';
+            playIcon.classList.add('hidden');
+            stopIcon.classList.remove('hidden');
+            status.textContent = 'Streaming blessed scripture music';
+            isPlaying = true;
+        }
+
+        function setStoppedState() {
+            playBtn.className = 'w-16 h-16 rounded-full bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700 transition-all duration-300 flex items-center justify-center shadow-2xl transform hover:scale-105';
+            playIcon.classList.remove('hidden');
+            stopIcon.classList.add('hidden');
+            status.textContent = 'Press play to Hear the Word of God';
+            isPlaying = false;
+        }
+
+        playBtn.addEventListener('click', async () => {
             if (isPlaying) {
-                audio.pause();
-                audio.src = '';
-                playBtn.className = 'w-16 h-16 rounded-full bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700 transition-all duration-300 flex items-center justify-center shadow-2xl transform hover:scale-105 mx-auto mb-3';
-                playIcon.classList.remove('hidden');
-                stopIcon.classList.add('hidden');
-                status.textContent = 'Press play to Hear the Word of God';
-                isPlaying = false;
+                // Pause current song
+                if (currentAudio) {
+                    currentAudio.pause();
+                }
+                setStoppedState();
                 clearInterval(nowPlayingInterval);
             } else {
-                audio.src = '/stream?' + Date.now();
-                audio.play().then(() => {
-                    playBtn.className = 'w-16 h-16 rounded-full bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 transition-all duration-300 flex items-center justify-center shadow-2xl transform hover:scale-105 mx-auto mb-3';
-                    playIcon.classList.add('hidden');
-                    stopIcon.classList.remove('hidden');
-                    status.textContent = 'Streaming blessed scripture music';
-                    isPlaying = true;
-                    updateNowPlaying();
+                // Resume if paused, or start new song if stopped
+                if (currentAudio && currentAudio.src && currentAudio.currentTime > 0) {
+                    await audioContext.resume();
+                    currentAudio.play();
+                } else {
+                    await initAudioContext();
+                    if (audioContext.state === 'suspended') {
+                        await audioContext.resume();
+                    }
+                    playNewSong(false); // No crossfade on first play
                     nowPlayingInterval = setInterval(updateNowPlaying, 10000);
-                    lucide.createIcons();
-                }).catch(() => {
-                    status.textContent = 'Error loading stream';
-                });
+                }
+                setPlayingState();
             }
         });
 
-        audio.addEventListener('loadstart', () => {
-            if (!isPlaying) {
-                playBtn.className = 'w-16 h-16 rounded-full bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 transition-all duration-300 flex items-center justify-center shadow-2xl transform hover:scale-105 mx-auto mb-3';
-                playIcon.classList.add('hidden');
-                stopIcon.classList.remove('hidden');
-                status.textContent = 'Streaming blessed scripture music';
-                isPlaying = true;
-                lucide.createIcons();
-            }
-        });
-
-        audio.addEventListener('ended', () => {
+        nextBtn.addEventListener('click', () => {
             if (isPlaying) {
-                audio.src = '/stream?' + Date.now();
-                audio.play();
-                updateNowPlaying();
+                playNewSong(true); // Enable crossfade
+            } else {
+                playNewSong(false);
             }
         });
 
-        // Initial load
+        prevBtn.addEventListener('click', () => {
+            if (isPlaying) {
+                playNewSong(true); // Enable crossfade
+            } else {
+                playNewSong(false);
+            }
+        });
+
+        // Set up event listeners for current audio (will be updated when songs change)
+        function setupAudioListeners(audio) {
+            audio.addEventListener('ended', () => {
+                if (isPlaying) {
+                    playNewSong(true); // Auto-crossfade to next song
+                }
+            });
+
+            audio.addEventListener('error', (e) => {
+                console.log('Audio error:', e);
+                if (isPlaying) {
+                    setTimeout(() => {
+                        playNewSong(false);
+                    }, 1000);
+                }
+            });
+
+            audio.addEventListener('stalled', () => {
+                console.log('Audio stalled, retrying...');
+                if (isPlaying) {
+                    setTimeout(() => {
+                        audio.load();
+                        audio.play();
+                    }, 2000);
+                }
+            });
+        }
+
         updateNowPlaying();
     </script>
 </body>
