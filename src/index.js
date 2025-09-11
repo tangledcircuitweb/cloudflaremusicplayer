@@ -208,7 +208,7 @@ function getPlayerHTML() {
             </h1>
             <div class="flex items-center justify-center space-x-2 text-gray-700 text-sm">
                 <i data-lucide="radio" class="w-4 h-4 text-amber-600 drop-shadow-sm"></i>
-                <span class="font-medium drop-shadow-sm">24 Hours of Bible Music</span>
+                <span class="font-medium drop-shadow-sm">Streaming The Lord 24 Hours a Day</span>
             </div>
         </div>
 
@@ -262,12 +262,12 @@ function getPlayerHTML() {
             <div class="p-3 mirror-effect border-t border-white/20">
                 <div class="flex justify-center space-x-6 text-gray-600 text-xs">
                     <div class="flex items-center space-x-1">
-                        <i data-lucide="radio" class="w-3 h-3 text-green-500 drop-shadow-sm"></i>
-                        <span class="font-medium drop-shadow-sm">STREAMING</span>
-                    </div>
-                    <div class="flex items-center space-x-1">
                         <i data-lucide="heart" class="w-3 h-3 text-red-400 drop-shadow-sm"></i>
                         <span class="font-medium drop-shadow-sm">BLESSED</span>
+                    </div>
+                    <div class="flex items-center space-x-1">
+                        <i data-lucide="radio" class="w-3 h-3 text-green-500 drop-shadow-sm"></i>
+                        <span class="font-medium drop-shadow-sm">STREAMING</span>
                     </div>
                     <div class="flex items-center space-x-1">
                         <i data-lucide="clock" class="w-3 h-3 text-blue-400 drop-shadow-sm"></i>
@@ -368,9 +368,39 @@ function getPlayerHTML() {
         function connectAudioToContext(audio) {
             const source = audioContext.createMediaElementSource(audio);
             const gainNode = audioContext.createGain();
-            source.connect(gainNode);
+            
+            // Create gentle compressor for volume leveling
+            const compressor = audioContext.createDynamicsCompressor();
+            
+            // Gentle compression settings (preserve quality)
+            compressor.threshold.setValueAtTime(-24, audioContext.currentTime); // Higher threshold = less compression
+            compressor.knee.setValueAtTime(12, audioContext.currentTime);      // Softer knee for smoother compression
+            compressor.ratio.setValueAtTime(2.5, audioContext.currentTime);    // Gentler 2.5:1 ratio
+            compressor.attack.setValueAtTime(0.01, audioContext.currentTime);  // Slower 10ms attack
+            compressor.release.setValueAtTime(0.25, audioContext.currentTime); // Longer 250ms release
+            
+            // Gentle limiter (safety only)
+            const limiter = audioContext.createDynamicsCompressor();
+            limiter.threshold.setValueAtTime(-3, audioContext.currentTime);    // Higher threshold
+            limiter.knee.setValueAtTime(2, audioContext.currentTime);          // Soft knee
+            limiter.ratio.setValueAtTime(8, audioContext.currentTime);         // Gentler 8:1 ratio
+            limiter.attack.setValueAtTime(0.005, audioContext.currentTime);    // 5ms attack
+            limiter.release.setValueAtTime(0.05, audioContext.currentTime);    // 50ms release
+            
+            // Reduced makeup gain
+            const makeupGain = audioContext.createGain();
+            makeupGain.gain.setValueAtTime(1.5, audioContext.currentTime);     // +3.5dB makeup gain (reduced)
+            
+            // Audio chain: Source → Compressor → Makeup Gain → Limiter → Volume → Output
+            source.connect(compressor);
+            compressor.connect(makeupGain);
+            makeupGain.connect(limiter);
+            limiter.connect(gainNode);
             gainNode.connect(audioContext.destination);
-            return { source, gainNode };
+            
+            console.log('Audio chain: Gentle compression and limiting applied');
+            
+            return { source, gainNode, compressor, limiter, makeupGain };
         }
 
         function crossfade(fromGain, toGain, duration = 3000) {
@@ -431,8 +461,10 @@ function getPlayerHTML() {
             nextAudio = createAudioElement();
             nextAudio.src = '/stream?' + Date.now();
             
-            const { gainNode } = connectAudioToContext(nextAudio);
+            const { gainNode, compressor, limiter, makeupGain } = connectAudioToContext(nextAudio);
             nextGain = gainNode;
+            
+            console.log('Audio processing chain created with compression and limiting');
             
             // Set up event listeners for this audio element
             setupAudioListeners(nextAudio);
@@ -495,7 +527,7 @@ function getPlayerHTML() {
             playBtn.className = 'w-16 h-16 rounded-full bg-gradient-to-r from-red-400 to-red-500 hover:from-red-500 hover:to-red-600 transition-all duration-300 flex items-center justify-center shadow-2xl transform hover:scale-105 border-2 border-white/40 glass-button';
             playIcon.classList.add('hidden');
             stopIcon.classList.remove('hidden');
-            status.textContent = 'Streaming the Word of God';
+            status.textContent = 'Streaming The Word of God';
             isPlaying = true;
             startTimeUpdates();
         }
@@ -504,7 +536,7 @@ function getPlayerHTML() {
             playBtn.className = 'w-16 h-16 rounded-full bg-gradient-to-r from-emerald-400 to-green-500 hover:from-emerald-500 hover:to-green-600 transition-all duration-300 flex items-center justify-center shadow-2xl transform hover:scale-105 border-2 border-white/40 glass-button';
             playIcon.classList.remove('hidden');
             stopIcon.classList.add('hidden');
-            status.textContent = 'Press play to Hear the Word of God';
+            status.textContent = 'Press play to Hear The Word of God';
             isPlaying = false;
             stopTimeUpdates();
             timeline.value = 0;
