@@ -200,10 +200,10 @@ function getPlayerHTML() {
         }
     </style>
 </head>
-<body class="h-screen font-sans overflow-hidden">
-    <div class="h-screen flex flex-col items-center justify-center p-4 max-w-lg mx-auto">
-        <div class="text-center mb-6">
-            <h1 class="text-3xl md:text-4xl lg:text-5xl font-serif font-bold text-transparent bg-gradient-to-r from-yellow-600 via-amber-600 to-yellow-700 bg-clip-text mb-4 drop-shadow-lg filter brightness-110 whitespace-nowrap">
+<body class="min-h-screen font-sans">
+    <div class="min-h-screen flex flex-col items-center justify-center p-4 max-w-lg mx-auto pb-16 py-8">
+        <div class="text-center mb-4 md:mb-6">
+            <h1 class="text-3xl md:text-4xl lg:text-5xl font-serif font-bold text-transparent bg-gradient-to-r from-yellow-600 via-amber-600 to-yellow-700 bg-clip-text mb-2 md:mb-4 drop-shadow-lg filter brightness-110 whitespace-nowrap">
                 Epic Scripture
             </h1>
             <div class="flex items-center justify-center space-x-2 text-gray-700 text-sm">
@@ -277,7 +277,7 @@ function getPlayerHTML() {
             </div>
         </div>
 
-        <div class="mt-4 text-center text-gray-600 text-xs glass-intense rounded-xl p-3">
+        <div class="mt-3 md:mt-4 text-center text-gray-600 text-xs glass-intense rounded-xl p-3">
             <p class="italic font-serif drop-shadow-sm">"Sing to the Lord a new song"</p>
             <p class="text-gray-500 mt-1 drop-shadow-sm">- Psalm 96:1</p>
         </div>
