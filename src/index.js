@@ -451,11 +451,17 @@ function getPlayerHTML() {
                             // Start crossfade
                             crossfade(currentGain, nextGain, 3000);
                             
-                            // Clean up old audio after fade
+                            // Clean up old audio after fade - more safely
                             setTimeout(() => {
-                                if (currentAudio) {
+                                if (currentAudio && currentAudio !== nextAudio) {
+                                    console.log('Cleaning up old audio after crossfade');
                                     currentAudio.pause();
-                                    currentAudio.src = '';
+                                    // Don't clear src immediately, let it fade out naturally
+                                    setTimeout(() => {
+                                        if (currentAudio && currentAudio !== playerState.currentAudio) {
+                                            currentAudio.src = '';
+                                        }
+                                    }, 1000);
                                 }
                             }, 3000);
                         }
@@ -550,15 +556,31 @@ function getPlayerHTML() {
 
         // Set up event listeners for current audio (will be updated when songs change)
         function setupAudioListeners(audio) {
-            audio.addEventListener('loadedmetadata', () => {
-                updateTimeline();
+            // Remove any existing listeners to prevent duplicates
+            const events = ['loadedmetadata', 'timeupdate', 'ended', 'error', 'stalled'];
+            events.forEach(event => {
+                const existingListeners = audio.cloneNode ? [] : audio._listeners?.[event] || [];
+                existingListeners.forEach(listener => {
+                    audio.removeEventListener(event, listener);
+                });
             });
-
-            audio.addEventListener('timeupdate', () => {
+            
+            // Store listeners for cleanup
+            if (!audio._listeners) audio._listeners = {};
+            
+            const metadataListener = () => {
                 updateTimeline();
-            });
+            };
+            audio.addEventListener('loadedmetadata', metadataListener);
+            audio._listeners.loadedmetadata = [metadataListener];
 
-            audio.addEventListener('ended', () => {
+            const timeUpdateListener = () => {
+                updateTimeline();
+            };
+            audio.addEventListener('timeupdate', timeUpdateListener);
+            audio._listeners.timeupdate = [timeUpdateListener];
+
+            const endedListener = () => {
                 console.log('Song ended, checking if we should crossfade...');
                 if (isPlaying && !isTransitioning) {
                     console.log('Starting crossfade to next song');
@@ -568,26 +590,32 @@ function getPlayerHTML() {
                 } else {
                     console.log('Not playing, ignoring ended event');
                 }
-            });
+            };
+            audio.addEventListener('ended', endedListener);
+            audio._listeners.ended = [endedListener];
 
-            audio.addEventListener('error', (e) => {
+            const errorListener = (e) => {
                 console.log('Audio error:', e);
-                if (isPlaying) {
+                if (isPlaying && !isTransitioning) {
                     setTimeout(() => {
                         playNewSong(false);
                     }, 1000);
                 }
-            });
+            };
+            audio.addEventListener('error', errorListener);
+            audio._listeners.error = [errorListener];
 
-            audio.addEventListener('stalled', () => {
+            const stalledListener = () => {
                 console.log('Audio stalled, retrying...');
-                if (isPlaying) {
+                if (isPlaying && !isTransitioning) {
                     setTimeout(() => {
                         audio.load();
                         audio.play();
                     }, 2000);
                 }
-            });
+            };
+            audio.addEventListener('stalled', stalledListener);
+            audio._listeners.stalled = [stalledListener];
         }
 
         updateNowPlaying();
