@@ -235,7 +235,7 @@ function getPlayerHTML() {
                         <span id="currentTime">0:00</span>
                         <div class="flex-1 relative">
                             <input type="range" id="timeline" min="0" max="100" value="0" 
-                                   class="w-full h-2 bg-white/30 rounded-lg appearance-none cursor-pointer glass-button"
+                                   class="w-full h-2 bg-white/30 rounded-lg appearance-none glass-button pointer-events-none"
                                    style="background: linear-gradient(to right, #f59e0b 0%, #f59e0b 0%, rgba(255,255,255,0.3) 0%, rgba(255,255,255,0.3) 100%);">
                         </div>
                         <span id="duration">0:00</span>
@@ -307,6 +307,7 @@ function getPlayerHTML() {
         let nowPlayingInterval;
         let timeUpdateInterval;
         let crossfadeTimeout = null;
+        let isTransitioning = false; // Prevent multiple crossfades
 
         function formatTime(seconds) {
             const mins = Math.floor(seconds / 60);
@@ -317,7 +318,7 @@ function getPlayerHTML() {
         let isScrubbing = false;
 
         function updateTimeline() {
-            if (currentAudio && !isNaN(currentAudio.duration) && !isScrubbing) {
+            if (currentAudio && !isNaN(currentAudio.duration)) {
                 const progress = (currentAudio.currentTime / currentAudio.duration) * 100;
                 timeline.value = progress;
                 timeline.style.background = 'linear-gradient(to right, #f59e0b ' + progress + '%, rgba(255,255,255,0.3) ' + progress + '%)';
@@ -337,35 +338,17 @@ function getPlayerHTML() {
             }
         }
 
-        // Timeline scrubber functionality
-        timeline.addEventListener('mousedown', () => {
-            isScrubbing = true;
+        // Timeline scrubber functionality - disabled for streams, progress only
+        timeline.addEventListener('mousedown', (e) => {
+            // Prevent scrubbing on streamed content
+            e.preventDefault();
+            console.log('Scrubbing disabled for streamed content');
         });
 
-        timeline.addEventListener('mouseup', () => {
-            isScrubbing = false;
-            if (currentAudio && !isNaN(currentAudio.duration) && currentAudio.duration > 0) {
-                const newTime = (timeline.value / 100) * currentAudio.duration;
-                currentAudio.currentTime = newTime;
-                updateTimeline();
-            }
-        });
-
-        timeline.addEventListener('input', () => {
-            if (currentAudio && !isNaN(currentAudio.duration) && currentAudio.duration > 0) {
-                const newTime = (timeline.value / 100) * currentAudio.duration;
-                const progress = timeline.value;
-                timeline.style.background = 'linear-gradient(to right, #f59e0b ' + progress + '%, rgba(255,255,255,0.3) ' + progress + '%)';
-                currentTimeEl.textContent = formatTime(newTime);
-            }
-        });
-
-        timeline.addEventListener('change', () => {
-            if (currentAudio && !isNaN(currentAudio.duration) && currentAudio.duration > 0) {
-                const newTime = (timeline.value / 100) * currentAudio.duration;
-                currentAudio.currentTime = newTime;
-                updateTimeline();
-            }
+        timeline.addEventListener('click', (e) => {
+            // Prevent clicking to seek
+            e.preventDefault();
+            console.log('Seeking disabled for streamed content');
         });
 
         // Initialize Web Audio Context
@@ -433,6 +416,15 @@ function getPlayerHTML() {
         }
 
         function playNewSong(crossfadeEnabled = true) {
+            // Prevent multiple simultaneous transitions
+            if (isTransitioning) {
+                console.log('Transition already in progress, ignoring...');
+                return;
+            }
+            
+            isTransitioning = true;
+            console.log('Starting new song transition...');
+            
             initAudioContext();
             
             // Create new audio element
@@ -453,9 +445,9 @@ function getPlayerHTML() {
             }
             
             nextAudio.addEventListener('canplay', () => {
-                if (isPlaying) {
+                if (isPlaying && nextAudio) { // Check nextAudio still exists
                     nextAudio.play().then(() => {
-                        if (crossfadeEnabled && currentAudio && currentGain) {
+                        if (crossfadeEnabled && currentAudio && currentGain && nextGain) {
                             // Start crossfade
                             crossfade(currentGain, nextGain, 3000);
                             
@@ -468,15 +460,24 @@ function getPlayerHTML() {
                             }, 3000);
                         }
                         
-                        // Switch references
-                        currentAudio = nextAudio;
-                        currentGain = nextGain;
-                        nextAudio = null;
-                        nextGain = null;
+                        // Switch references only if nextAudio still exists
+                        if (nextAudio && nextGain) {
+                            currentAudio = nextAudio;
+                            currentGain = nextGain;
+                            nextAudio = null;
+                            nextGain = null;
+                        }
+                        
+                        // Reset transition flag after everything is set up
+                        setTimeout(() => {
+                            isTransitioning = false;
+                            console.log('Transition complete');
+                        }, 1000);
                         
                         updateNowPlaying();
                     }).catch(() => {
                         status.textContent = 'Error loading stream';
+                        isTransitioning = false;
                     });
                 }
             });
@@ -558,9 +559,14 @@ function getPlayerHTML() {
             });
 
             audio.addEventListener('ended', () => {
-                console.log('Song ended, starting crossfade...');
-                if (isPlaying) {
+                console.log('Song ended, checking if we should crossfade...');
+                if (isPlaying && !isTransitioning) {
+                    console.log('Starting crossfade to next song');
                     playNewSong(true); // Auto-crossfade to next song
+                } else if (isTransitioning) {
+                    console.log('Transition already in progress, ignoring ended event');
+                } else {
+                    console.log('Not playing, ignoring ended event');
                 }
             });
 
