@@ -704,8 +704,10 @@ function getPlayerHTML() {
             // Create analyser for visualization
             if (!analyser) {
                 analyser = audioContext.createAnalyser();
-                analyser.fftSize = 512; // Increase for better frequency resolution
-                analyser.smoothingTimeConstant = 0.3; // Reduce smoothing for faster response
+                analyser.fftSize = 1024; // Higher resolution for better responsiveness
+                analyser.smoothingTimeConstant = 0.1; // Minimal smoothing for instant response
+                analyser.minDecibels = -90;
+                analyser.maxDecibels = -10;
                 const bufferLength = analyser.frequencyBinCount;
                 dataArray = new Uint8Array(bufferLength);
             }
@@ -1278,8 +1280,8 @@ function getPlayerHTML() {
             bands.highMid /= Math.floor(2000 / binHz);
             bands.treble /= Math.floor((nyquist - 4000) / binHz);
             
-            // Faster fade for more responsive visuals
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.15)';
+            // Ultra-fast fade for maximum responsiveness
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
             
             const centerX = canvas.width / 2;
@@ -1292,9 +1294,9 @@ function getPlayerHTML() {
             }
             avgAmplitude = avgAmplitude / dataArray.length / 255;
             
-            // More responsive dynamic radius with less smoothing
+            // Ultra-responsive dynamic radius
             const baseRadius = Math.max(canvas.width, canvas.height) * 0.7;
-            const dynamicMultiplier = 0.05 + (avgAmplitude * 3.0); // More dramatic range
+            const dynamicMultiplier = 0.02 + (avgAmplitude * 4.0); // Even more dramatic range
             const maxRadius = baseRadius * dynamicMultiplier;
             
             // Draw Chi-Rho - size scales with intensity
@@ -1306,8 +1308,8 @@ function getPlayerHTML() {
             const bars = 200; // Even more bars for denser effect
             const barWidth = (Math.PI * 2) / bars;
             
-            // More rings for depth when fire is big
-            const ringCount = Math.floor(3 + avgAmplitude * 3); // 3-6 rings based on intensity
+            // More dynamic ring count for responsiveness
+            const ringCount = Math.floor(2 + avgAmplitude * 5); // 2-7 rings for more variation
             
             for (let ring = 0; ring < ringCount; ring++) {
                 const ringOffset = ring * 0.12;
@@ -1317,9 +1319,9 @@ function getPlayerHTML() {
                     const dataIndex = Math.floor(i * dataArray.length / bars);
                     const amplitude = dataArray[dataIndex] / 255;
                     
-                    // Reduced bar height to see dancing ends
-                    const barHeight = amplitude * maxRadius * (0.8 - ringOffset * 0.3); // Much shorter bars
-                    const angle = barWidth * i + (Date.now() * 0.0001 * (ring + 1)); // Slower, smoother rotation
+                    // Responsive bar height with more variation
+                    const barHeight = (amplitude * amplitude) * maxRadius * (1.0 - ringOffset * 0.4); // Squared for more punch
+                    const angle = barWidth * i + (performance.now() * 0.0002 * (ring + 1)); // Faster rotation with better timing
                     
                     // Inner radius starts from outside the Chi-Rho's black circle
                     const innerRadius = protectedRadius + (ringOffset * maxRadius * 0.3); // Start outside protected zone
