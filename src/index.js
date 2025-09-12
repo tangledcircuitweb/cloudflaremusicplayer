@@ -102,7 +102,7 @@ export default {
     if (url.pathname === '/api/minutes') {
       if (request.method === 'POST') {
         // Increment minutes counter - KV limits removed with paid plan
-        const minutes = parseFloat(url.searchParams.get('minutes') || '0.25'); // Default to 15 seconds
+        const minutes = parseFloat(url.searchParams.get('minutes') || '1'); // Default to 1 minute
         const current = parseFloat(await env.RADIO_KV.get('global_minutes_served') || '0');
         const updated = current + minutes;
         await env.RADIO_KV.put('global_minutes_served', updated.toString());
@@ -1144,8 +1144,8 @@ function getPlayerHTML() {
         }
         
         function incrementMinutesCounter() {
-            // Increment by 0.25 minutes (15 seconds)
-            fetch('/api/minutes?minutes=0.25', { method: 'POST' })
+            // Increment by 1 minute
+            fetch('/api/minutes?minutes=1', { method: 'POST' })
                 .then(response => response.json())
                 .then(data => {
                     const minutes = Math.floor(data.total);
@@ -1167,8 +1167,8 @@ function getPlayerHTML() {
         }
         
         function startMinutesCounter() {
-            // Increment every 15 seconds while playing
-            minutesCounterInterval = setInterval(incrementMinutesCounter, 15000);
+            // Increment every minute while playing
+            minutesCounterInterval = setInterval(incrementMinutesCounter, 60000);
         }
         
         function stopMinutesCounter() {
