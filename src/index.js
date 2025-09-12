@@ -1304,68 +1304,95 @@ function getPlayerHTML() {
             const protectedRadius = chiRhoSize * 1.8; // Radius of the black circle
             drawChiRho(centerX, centerY, chiRhoSize);
             
-            // Draw multiple rings of fire bars
-            const bars = 200; // Even more bars for denser effect
+            // Draw 128 individual frequency bars - pure frequency visualization
+            const bars = 128; // 128 frequency bins across the spectrum
             const barWidth = (Math.PI * 2) / bars;
             
-            // More dynamic ring count for responsiveness
-            const ringCount = Math.floor(2 + avgAmplitude * 5); // 2-7 rings for more variation
-            
-            for (let ring = 0; ring < ringCount; ring++) {
-                const ringOffset = ring * 0.12;
-                const ringOpacity = 1 - (ring * 0.15);
+            for (let i = 0; i < bars; i++) {
+                // Direct frequency mapping - each bar is a specific frequency
+                const amplitude = dataArray[i] / 255;
                 
-                for (let i = 0; i < bars; i++) {
-                    const dataIndex = Math.floor(i * dataArray.length / bars);
-                    const amplitude = dataArray[dataIndex] / 255;
-                    
-                    // Responsive bar height with more variation
-                    const barHeight = (amplitude * amplitude) * maxRadius * (1.0 - ringOffset * 0.4); // Squared for more punch
-                    const angle = barWidth * i + (performance.now() * 0.0002 * (ring + 1)); // Faster rotation with better timing
-                    
-                    // Inner radius starts from outside the Chi-Rho's black circle
-                    const innerRadius = protectedRadius + (ringOffset * maxRadius * 0.3); // Start outside protected zone
-                    const x1 = centerX + Math.cos(angle) * innerRadius;
-                    const y1 = centerY + Math.sin(angle) * innerRadius;
-                    const x2 = centerX + Math.cos(angle) * (innerRadius + barHeight);
-                    const y2 = centerY + Math.sin(angle) * (innerRadius + barHeight);
-                    
-                    // Fire gradient - from white hot to deep red
-                    const gradient = ctx.createLinearGradient(x1, y1, x2, y2);
-                    
-                    // Fire colors based on amplitude
-                    if (amplitude > 0.7) {
-                        // Hot white/yellow core
-                        gradient.addColorStop(0, 'rgba(255, 255, 200, ' + (ringOpacity * 0.3) + ')');
-                        gradient.addColorStop(0.3, 'rgba(255, 245, 100, ' + (ringOpacity * 0.5) + ')');
-                        gradient.addColorStop(0.6, 'rgba(255, 200, 0, ' + (ringOpacity * 0.8) + ')');
-                        gradient.addColorStop(1, 'rgba(255, 100, 0, ' + ringOpacity + ')');
-                    } else if (amplitude > 0.4) {
-                        // Orange flames
-                        gradient.addColorStop(0, 'rgba(255, 200, 0, ' + (ringOpacity * 0.2) + ')');
-                        gradient.addColorStop(0.4, 'rgba(255, 150, 0, ' + (ringOpacity * 0.6) + ')');
-                        gradient.addColorStop(0.7, 'rgba(255, 80, 0, ' + (ringOpacity * 0.8) + ')');
-                        gradient.addColorStop(1, 'rgba(200, 50, 0, ' + ringOpacity + ')');
-                    } else {
-                        // Red embers
-                        gradient.addColorStop(0, 'rgba(255, 100, 0, ' + (ringOpacity * 0.1) + ')');
-                        gradient.addColorStop(0.5, 'rgba(200, 50, 0, ' + (ringOpacity * 0.4) + ')');
-                        gradient.addColorStop(1, 'rgba(150, 0, 0, ' + (ringOpacity * 0.7) + ')');
-                    }
-                    
-                    ctx.strokeStyle = gradient;
-                    ctx.lineWidth = 3 + (amplitude * 4); // Dynamic width
-                    ctx.lineCap = 'round';
-                    ctx.shadowBlur = 10 + (amplitude * 20);
-                    
-                    // Fire shadow colors
-                    ctx.shadowColor = amplitude > 0.5 ? 'rgba(255, 150, 0, 0.8)' : 'rgba(255, 50, 0, 0.6)';
-                    
-                    ctx.beginPath();
-                    ctx.moveTo(x1, y1);
-                    ctx.lineTo(x2, y2);
-                    ctx.stroke();
+                // Cubed response for dramatic effect
+                const barHeight = (amplitude * amplitude * amplitude) * maxRadius * 1.5;
+                
+                // Position each frequency bar around the circle
+                const angle = (barWidth * i) - Math.PI / 2; // Start from top
+                
+                // Start just outside the Chi-Rho's black circle
+                const innerRadius = protectedRadius + 5;
+                const x1 = centerX + Math.cos(angle) * innerRadius;
+                const y1 = centerY + Math.sin(angle) * innerRadius;
+                const x2 = centerX + Math.cos(angle) * (innerRadius + barHeight);
+                const y2 = centerY + Math.sin(angle) * (innerRadius + barHeight);
+                
+                // Pure fire gradient based on amplitude intensity
+                const gradient = ctx.createLinearGradient(x1, y1, x2, y2);
+                
+                if (amplitude > 0.85) {
+                    // Blazing white-blue core
+                    gradient.addColorStop(0, 'rgba(255, 255, 255, 1)');
+                    gradient.addColorStop(0.2, 'rgba(200, 220, 255, 0.9)');
+                    gradient.addColorStop(0.5, 'rgba(255, 255, 200, 0.8)');
+                    gradient.addColorStop(1, 'rgba(255, 220, 0, 0.9)');
+                } else if (amplitude > 0.7) {
+                    // White-hot
+                    gradient.addColorStop(0, 'rgba(255, 255, 220, 0.9)');
+                    gradient.addColorStop(0.3, 'rgba(255, 255, 150, 0.8)');
+                    gradient.addColorStop(0.6, 'rgba(255, 240, 50, 0.8)');
+                    gradient.addColorStop(1, 'rgba(255, 200, 0, 0.9)');
+                } else if (amplitude > 0.55) {
+                    // Yellow-hot
+                    gradient.addColorStop(0, 'rgba(255, 255, 100, 0.8)');
+                    gradient.addColorStop(0.3, 'rgba(255, 230, 0, 0.8)');
+                    gradient.addColorStop(0.7, 'rgba(255, 180, 0, 0.8)');
+                    gradient.addColorStop(1, 'rgba(255, 120, 0, 0.9)');
+                } else if (amplitude > 0.4) {
+                    // Orange flames
+                    gradient.addColorStop(0, 'rgba(255, 200, 0, 0.7)');
+                    gradient.addColorStop(0.4, 'rgba(255, 160, 0, 0.7)');
+                    gradient.addColorStop(0.7, 'rgba(255, 100, 0, 0.8)');
+                    gradient.addColorStop(1, 'rgba(240, 60, 0, 0.9)');
+                } else if (amplitude > 0.25) {
+                    // Red-orange
+                    gradient.addColorStop(0, 'rgba(255, 130, 0, 0.6)');
+                    gradient.addColorStop(0.4, 'rgba(255, 80, 0, 0.6)');
+                    gradient.addColorStop(0.7, 'rgba(230, 40, 0, 0.7)');
+                    gradient.addColorStop(1, 'rgba(200, 20, 0, 0.8)');
+                } else if (amplitude > 0.1) {
+                    // Deep red
+                    gradient.addColorStop(0, 'rgba(220, 60, 0, 0.5)');
+                    gradient.addColorStop(0.5, 'rgba(200, 30, 0, 0.5)');
+                    gradient.addColorStop(1, 'rgba(150, 0, 0, 0.6)');
+                } else if (amplitude > 0.02) {
+                    // Ember glow
+                    gradient.addColorStop(0, 'rgba(180, 20, 0, 0.3)');
+                    gradient.addColorStop(0.5, 'rgba(140, 0, 0, 0.4)');
+                    gradient.addColorStop(1, 'rgba(100, 0, 0, 0.5)');
+                } else {
+                    // Nearly invisible
+                    gradient.addColorStop(0, 'rgba(80, 0, 0, 0.1)');
+                    gradient.addColorStop(1, 'rgba(40, 0, 0, 0.2)');
                 }
+                
+                ctx.strokeStyle = gradient;
+                // Thinner lines for 128 bars to avoid overlap
+                ctx.lineWidth = Math.max(1.5, (canvas.width / bars) * 0.7);
+                ctx.lineCap = 'round';
+                
+                // Dynamic shadow based on amplitude
+                ctx.shadowBlur = amplitude * 25;
+                if (amplitude > 0.7) {
+                    ctx.shadowColor = 'rgba(255, 255, 100, ' + amplitude + ')';
+                } else if (amplitude > 0.4) {
+                    ctx.shadowColor = 'rgba(255, 150, 0, ' + amplitude + ')';
+                } else {
+                    ctx.shadowColor = 'rgba(200, 50, 0, ' + (amplitude * 0.8) + ')';
+                }
+                
+                ctx.beginPath();
+                ctx.moveTo(x1, y1);
+                ctx.lineTo(x2, y2);
+                ctx.stroke();
             }
             
             // Add flickering glow effect that scales with intensity
