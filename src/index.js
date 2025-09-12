@@ -101,19 +101,14 @@ export default {
     // Handle minutes counter endpoints
     if (url.pathname === '/api/minutes') {
       if (request.method === 'POST') {
-        // Temporarily disable minutes counter writes to avoid KV write limits
-        // Just return a mock response for now
-        try {
-          const current = parseFloat(await env.RADIO_KV.get('global_minutes_served') || '0');
-          // Don't actually write, just return the current value
-          return new Response(JSON.stringify({ total: current }), {
-            headers: { 'Content-Type': 'application/json' }
-          });
-        } catch (error) {
-          return new Response(JSON.stringify({ total: 0 }), {
-            headers: { 'Content-Type': 'application/json' }
-          });
-        }
+        // Increment minutes counter - KV limits removed with paid plan
+        const minutes = parseFloat(url.searchParams.get('minutes') || '0.25'); // Default to 15 seconds
+        const current = parseFloat(await env.RADIO_KV.get('global_minutes_served') || '0');
+        const updated = current + minutes;
+        await env.RADIO_KV.put('global_minutes_served', updated.toString());
+        return new Response(JSON.stringify({ total: updated }), {
+          headers: { 'Content-Type': 'application/json' }
+        });
       } else {
         // GET - return current total
         const total = parseFloat(await env.RADIO_KV.get('global_minutes_served') || '0');
@@ -267,8 +262,8 @@ async function handleStreamWithSeek(request, env) {
     return new Response('Audio not found', { status: 404 });
   }
   
-  // Remove current song update to avoid KV write limits
-  // await env.RADIO_KV.put('__current_song', filename);
+  // Update current song - KV limits removed with paid plan
+  await env.RADIO_KV.put('__current_song', filename);
   
   // Handle range requests for scrubbing
   const range = request.headers.get('range');
