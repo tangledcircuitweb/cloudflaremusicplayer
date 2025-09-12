@@ -492,7 +492,15 @@ function getPlayerHTML() {
     </style>
 </head>
 <body class="min-h-screen font-sans">
-    <div class="min-h-screen flex flex-col items-center justify-center p-4 max-w-lg mx-auto pb-16 py-8">
+    <!-- Audio Visualizer Canvas -->
+    <canvas id="visualizer" class="fixed inset-0 w-full h-full opacity-60" style="pointer-events: none; background: transparent;"></canvas>
+    
+    <!-- Floating Eye Button -->
+    <button id="floatingEyeBtn" class="fixed top-4 right-4 z-50 w-12 h-12 rounded-full bg-black/50 backdrop-blur-md border border-white/30 hover:bg-black/70 transition-all duration-300 flex items-center justify-center hidden">
+        <i data-lucide="eye" class="w-6 h-6 text-white"></i>
+    </button>
+    
+    <div id="playerContainer" class="min-h-screen flex flex-col items-center justify-center p-4 max-w-lg mx-auto pb-16 py-8 relative z-10">
         <div class="text-center mb-4 md:mb-6">
             <h1 class="text-3xl md:text-4xl lg:text-5xl font-serif font-bold text-transparent bg-gradient-to-r from-yellow-600 via-amber-600 to-yellow-700 bg-clip-text mb-2 md:mb-4 drop-shadow-lg filter brightness-110 whitespace-nowrap">
                 Epic Scripture
@@ -517,6 +525,11 @@ function getPlayerHTML() {
                     
                     <button id="nextBtn" class="w-12 h-12 rounded-full glass-button hover:bg-white/20 transition-all duration-300 flex items-center justify-center transform hover:scale-105">
                         <i data-lucide="skip-forward" class="w-5 h-5 text-gray-700 drop-shadow-sm"></i>
+                    </button>
+                    
+                    <button id="visualizerBtn" class="w-12 h-12 rounded-full glass-button hover:bg-white/20 transition-all duration-300 flex items-center justify-center transform hover:scale-105 ml-4">
+                        <i id="eyeOpen" data-lucide="eye" class="w-5 h-5 text-gray-700 drop-shadow-sm"></i>
+                        <i id="eyeClosed" data-lucide="eye-off" class="w-5 h-5 text-gray-700 drop-shadow-sm hidden"></i>
                     </button>
                 </div>
                 
@@ -586,6 +599,9 @@ function getPlayerHTML() {
         const playBtn = document.getElementById('playBtn');
         const prevBtn = document.getElementById('prevBtn');
         const nextBtn = document.getElementById('nextBtn');
+        const visualizerBtn = document.getElementById('visualizerBtn');
+        const eyeOpen = document.getElementById('eyeOpen');
+        const eyeClosed = document.getElementById('eyeClosed');
         const timeline = document.getElementById('progressBar');
         const currentTimeEl = document.getElementById('currentTime');
         const durationEl = document.getElementById('duration');
@@ -609,6 +625,14 @@ function getPlayerHTML() {
         let trackHistory = []; // Store previously played tracks with metadata
         let historyIndex = -1; // Current position in history
         let currentTrackMetadata = null; // Store current track info
+        
+        // Visualizer setup
+        const canvas = document.getElementById('visualizer');
+        const ctx = canvas.getContext('2d');
+        let analyser = null;
+        let dataArray = null;
+        let animationId = null;
+        let visualizerEnabled = true;
 
         function formatTime(seconds) {
             const mins = Math.floor(seconds / 60);
@@ -663,6 +687,15 @@ function getPlayerHTML() {
             const source = audioContext.createMediaElementSource(audio);
             const gainNode = audioContext.createGain();
             
+            // Create analyser for visualization
+            if (!analyser) {
+                analyser = audioContext.createAnalyser();
+                analyser.fftSize = 256;
+                analyser.smoothingTimeConstant = 0.8;
+                const bufferLength = analyser.frequencyBinCount;
+                dataArray = new Uint8Array(bufferLength);
+            }
+            
             // Create compressor with slightly lighter settings
             const compressor = audioContext.createDynamicsCompressor();
             compressor.threshold.setValueAtTime(-20, audioContext.currentTime);  // Was -24, now lighter
@@ -683,14 +716,15 @@ function getPlayerHTML() {
             const makeupGain = audioContext.createGain();
             makeupGain.gain.setValueAtTime(1.5, audioContext.currentTime);
             
-            // Connect the audio processing chain
+            // Connect the audio processing chain with analyser
             source.connect(compressor);
             compressor.connect(limiter);
             limiter.connect(makeupGain);
-            makeupGain.connect(gainNode);
+            makeupGain.connect(analyser);
+            analyser.connect(gainNode);
             gainNode.connect(audioContext.destination);
             
-            console.log('Audio chain restored: Compressor -> Limiter -> Makeup Gain (1.5x)');
+            console.log('Audio chain with visualizer: Compressor -> Limiter -> Makeup Gain -> Analyser');
             
             return { source, gainNode };
         }
@@ -895,6 +929,7 @@ function getPlayerHTML() {
             isPlaying = true;
             startTimeUpdates();
             startMinutesCounter();
+            startVisualizer();
         }
 
         function setStoppedState() {
@@ -905,6 +940,7 @@ function getPlayerHTML() {
             isPlaying = false;
             stopTimeUpdates();
             stopMinutesCounter();
+            stopVisualizer();
             timeline.style.width = '0%';
             currentTimeEl.textContent = '0:00';
             durationEl.textContent = '0:00';
@@ -1130,6 +1166,196 @@ function getPlayerHTML() {
                 minutesCounterInterval = null;
             }
         }
+        
+        // Visualizer functions
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        
+        function drawChiRho(centerX, centerY, size) {
+            ctx.save();
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)'; // White for contrast against fire
+            ctx.lineWidth = 6;
+            ctx.lineCap = 'round';
+            ctx.shadowBlur = 20;
+            ctx.shadowColor = 'rgba(255, 200, 0, 1)';
+            
+            // Draw X (Chi)
+            ctx.beginPath();
+            ctx.moveTo(centerX - size, centerY - size);
+            ctx.lineTo(centerX + size, centerY + size);
+            ctx.moveTo(centerX + size, centerY - size);
+            ctx.lineTo(centerX - size, centerY + size);
+            ctx.stroke();
+            
+            // Draw P (Rho) - vertical line with loop
+            ctx.beginPath();
+            ctx.moveTo(centerX, centerY + size * 1.2);
+            ctx.lineTo(centerX, centerY - size * 0.6);
+            ctx.stroke();
+            
+            // Draw the loop of P
+            ctx.beginPath();
+            ctx.arc(centerX, centerY - size * 0.8, size * 0.3, 0, Math.PI, true);
+            ctx.stroke();
+            
+            ctx.restore();
+        }
+        
+        function drawVisualizer() {
+            if (!analyser || !isPlaying) {
+                if (animationId) {
+                    cancelAnimationFrame(animationId);
+                    animationId = null;
+                }
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                return;
+            }
+            
+            animationId = requestAnimationFrame(drawVisualizer);
+            
+            analyser.getByteFrequencyData(dataArray);
+            
+            // Semi-transparent black background for trail effect
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.08)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            const centerX = canvas.width / 2;
+            const centerY = canvas.height / 2;
+            const maxRadius = Math.min(canvas.width, canvas.height) * 0.45; // Much bigger
+            
+            // Draw Chi-Rho in center with glow
+            drawChiRho(centerX, centerY, 60);
+            
+            // Draw multiple rings of fire bars
+            const bars = 180; // Many more bars for dense fire effect
+            const barWidth = (Math.PI * 2) / bars;
+            
+            // Multiple concentric rings for depth
+            for (let ring = 0; ring < 3; ring++) {
+                const ringOffset = ring * 0.15;
+                const ringOpacity = 1 - (ring * 0.3);
+                
+                for (let i = 0; i < bars; i++) {
+                    const dataIndex = Math.floor(i * dataArray.length / bars);
+                    const amplitude = dataArray[dataIndex] / 255;
+                    const barHeight = amplitude * maxRadius * (1.2 - ringOffset);
+                    const angle = barWidth * i + (Date.now() * 0.0001 * (ring + 1)); // Rotating effect
+                    
+                    const innerRadius = maxRadius * (0.2 + ringOffset);
+                    const x1 = centerX + Math.cos(angle) * innerRadius;
+                    const y1 = centerY + Math.sin(angle) * innerRadius;
+                    const x2 = centerX + Math.cos(angle) * (innerRadius + barHeight);
+                    const y2 = centerY + Math.sin(angle) * (innerRadius + barHeight);
+                    
+                    // Fire gradient - from white hot to deep red
+                    const gradient = ctx.createLinearGradient(x1, y1, x2, y2);
+                    
+                    // Fire colors based on amplitude
+                    if (amplitude > 0.7) {
+                        // Hot white/yellow core
+                        gradient.addColorStop(0, 'rgba(255, 255, 200, ' + (ringOpacity * 0.3) + ')');
+                        gradient.addColorStop(0.3, 'rgba(255, 245, 100, ' + (ringOpacity * 0.5) + ')');
+                        gradient.addColorStop(0.6, 'rgba(255, 200, 0, ' + (ringOpacity * 0.8) + ')');
+                        gradient.addColorStop(1, 'rgba(255, 100, 0, ' + ringOpacity + ')');
+                    } else if (amplitude > 0.4) {
+                        // Orange flames
+                        gradient.addColorStop(0, 'rgba(255, 200, 0, ' + (ringOpacity * 0.2) + ')');
+                        gradient.addColorStop(0.4, 'rgba(255, 150, 0, ' + (ringOpacity * 0.6) + ')');
+                        gradient.addColorStop(0.7, 'rgba(255, 80, 0, ' + (ringOpacity * 0.8) + ')');
+                        gradient.addColorStop(1, 'rgba(200, 50, 0, ' + ringOpacity + ')');
+                    } else {
+                        // Red embers
+                        gradient.addColorStop(0, 'rgba(255, 100, 0, ' + (ringOpacity * 0.1) + ')');
+                        gradient.addColorStop(0.5, 'rgba(200, 50, 0, ' + (ringOpacity * 0.4) + ')');
+                        gradient.addColorStop(1, 'rgba(150, 0, 0, ' + (ringOpacity * 0.7) + ')');
+                    }
+                    
+                    ctx.strokeStyle = gradient;
+                    ctx.lineWidth = 3 + (amplitude * 4); // Dynamic width
+                    ctx.lineCap = 'round';
+                    ctx.shadowBlur = 10 + (amplitude * 20);
+                    ctx.shadowColor = amplitude > 0.5 ? 'rgba(255, 150, 0, 0.8)' : 'rgba(255, 50, 0, 0.6)';
+                    
+                    ctx.beginPath();
+                    ctx.moveTo(x1, y1);
+                    ctx.lineTo(x2, y2);
+                    ctx.stroke();
+                }
+            }
+            
+            // Add flickering glow effect
+            const glowIntensity = Math.sin(Date.now() * 0.002) * 0.5 + 0.5;
+            ctx.shadowBlur = 50 * glowIntensity;
+            ctx.shadowColor = 'rgba(255, 100, 0, 0.3)';
+            ctx.strokeStyle = 'rgba(255, 150, 0, 0.1)';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, maxRadius * 0.2, 0, Math.PI * 2);
+            ctx.stroke();
+        }
+        
+        function startVisualizer() {
+            resizeCanvas();
+            drawVisualizer();
+        }
+        
+        function stopVisualizer() {
+            if (animationId) {
+                cancelAnimationFrame(animationId);
+                animationId = null;
+            }
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+        }
+        
+        // Player visibility toggle button
+        const playerContainer = document.getElementById('playerContainer');
+        const floatingEyeBtn = document.getElementById('floatingEyeBtn');
+        let playerVisible = true;
+        
+        function togglePlayerVisibility() {
+            playerVisible = !playerVisible;
+            
+            // Toggle player visibility and floating button
+            if (playerVisible) {
+                eyeOpen.classList.remove('hidden');
+                eyeClosed.classList.add('hidden');
+                playerContainer.style.display = 'flex';
+                floatingEyeBtn.classList.add('hidden');
+                canvas.style.opacity = '0.6'; // Normal opacity when player visible
+            } else {
+                eyeOpen.classList.add('hidden');
+                eyeClosed.classList.remove('hidden');
+                playerContainer.style.display = 'none';
+                floatingEyeBtn.classList.remove('hidden');
+                canvas.style.opacity = '1'; // Full opacity when player hidden
+                // Re-create Lucide icons for the floating button
+                setTimeout(() => lucide.createIcons(), 100);
+            }
+        }
+        
+        visualizerBtn.addEventListener('click', () => {
+            togglePlayerVisibility();
+            
+            // Visual feedback
+            visualizerBtn.classList.add('scale-95', 'opacity-75');
+            visualizerBtn.style.background = 'rgba(255, 193, 7, 0.2)';
+            setTimeout(() => {
+                visualizerBtn.classList.remove('scale-95', 'opacity-75');
+                visualizerBtn.style.background = '';
+            }, 200);
+        });
+        
+        // Floating eye button to return to player
+        floatingEyeBtn.addEventListener('click', () => {
+            togglePlayerVisibility();
+        });
+        
+        // Handle window resize
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
         
         // Initialize counter on page load
         updateMinutesCounter();
