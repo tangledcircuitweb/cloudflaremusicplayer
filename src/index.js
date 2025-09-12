@@ -704,8 +704,8 @@ function getPlayerHTML() {
             // Create analyser for visualization
             if (!analyser) {
                 analyser = audioContext.createAnalyser();
-                analyser.fftSize = 256;
-                analyser.smoothingTimeConstant = 0.8;
+                analyser.fftSize = 512; // Increase for better frequency resolution
+                analyser.smoothingTimeConstant = 0.3; // Reduce smoothing for faster response
                 const bufferLength = analyser.frequencyBinCount;
                 dataArray = new Uint8Array(bufferLength);
             }
@@ -1227,12 +1227,20 @@ function getPlayerHTML() {
                 return;
             }
             
-            animationId = requestAnimationFrame(drawVisualizer);
+            // Use high-priority animation frame for tighter sync
+            if ('scheduler' in window && 'postTask' in scheduler) {
+                scheduler.postTask(() => {
+                    animationId = requestAnimationFrame(drawVisualizer);
+                }, { priority: 'user-blocking' });
+            } else {
+                animationId = requestAnimationFrame(drawVisualizer);
+            }
             
+            // Get fresh data every frame for tighter sync
             analyser.getByteFrequencyData(dataArray);
             
-            // Semi-transparent black background for trail effect
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.05)';
+            // Faster fade for more responsive visuals
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.15)';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
             
             const centerX = canvas.width / 2;
@@ -1245,9 +1253,9 @@ function getPlayerHTML() {
             }
             avgAmplitude = avgAmplitude / dataArray.length / 255;
             
-            // Dynamic radius - can grow larger than screen
+            // More responsive dynamic radius with less smoothing
             const baseRadius = Math.max(canvas.width, canvas.height) * 0.7;
-            const dynamicMultiplier = 0.1 + (avgAmplitude * 2.5); // From 10% to 260% of base
+            const dynamicMultiplier = 0.05 + (avgAmplitude * 3.0); // More dramatic range
             const maxRadius = baseRadius * dynamicMultiplier;
             
             // Draw Chi-Rho - size scales with intensity
@@ -1269,9 +1277,9 @@ function getPlayerHTML() {
                     const dataIndex = Math.floor(i * dataArray.length / bars);
                     const amplitude = dataArray[dataIndex] / 255;
                     
-                    // More dramatic height variations
-                    const barHeight = amplitude * maxRadius * (1.5 - ringOffset);
-                    const angle = barWidth * i + (Date.now() * 0.0002 * (ring + 1)); // Faster rotation
+                    // Instant response to amplitude changes
+                    const barHeight = amplitude * maxRadius * (1.8 - ringOffset);
+                    const angle = barWidth * i + (Date.now() * 0.0001 * (ring + 1)); // Slower, smoother rotation
                     
                     // Inner radius can shrink to nearly nothing
                     const innerRadius = maxRadius * (0.05 + ringOffset) * dynamicMultiplier;
