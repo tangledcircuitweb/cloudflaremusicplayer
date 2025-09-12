@@ -1132,12 +1132,13 @@ function getPlayerHTML() {
                     let display;
                     if (days > 0) {
                         const remainingHours = hours % 24;
-                        display = days.toLocaleString() + ' days, ' + remainingHours + ':' + String(minutes % 60).padStart(2, '0');
+                        const remainingMinutes = minutes % 60;
+                        display = days.toLocaleString() + ' days, ' + remainingHours + ' hours : ' + remainingMinutes + ' minutes';
                     } else if (hours > 0) {
                         const remainingMinutes = minutes % 60;
-                        display = hours + ':' + String(remainingMinutes).padStart(2, '0');
+                        display = hours + ' hours : ' + remainingMinutes + ' minutes';
                     } else {
-                        display = '0:' + String(minutes).padStart(2, '0');
+                        display = minutes + ' minutes';
                     }
                     
                     document.getElementById('minutesCounter').textContent = display;
@@ -1157,12 +1158,13 @@ function getPlayerHTML() {
                     let display;
                     if (days > 0) {
                         const remainingHours = hours % 24;
-                        display = days.toLocaleString() + ' days, ' + remainingHours + ':' + String(minutes % 60).padStart(2, '0');
+                        const remainingMinutes = minutes % 60;
+                        display = days.toLocaleString() + ' days, ' + remainingHours + ' hours : ' + remainingMinutes + ' minutes';
                     } else if (hours > 0) {
                         const remainingMinutes = minutes % 60;
-                        display = hours + ':' + String(remainingMinutes).padStart(2, '0');
+                        display = hours + ' hours : ' + remainingMinutes + ' minutes';
                     } else {
-                        display = '0:' + String(minutes).padStart(2, '0');
+                        display = minutes + ' minutes';
                     }
                     
                     document.getElementById('minutesCounter').textContent = display;
