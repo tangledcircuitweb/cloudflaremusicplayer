@@ -1187,44 +1187,21 @@ function getPlayerHTML() {
             canvas.height = window.innerHeight;
         }
         
-        function drawChiRho(centerX, centerY, size, bands) {
+        function drawChiRho(centerX, centerY, size) {
             ctx.save();
             
-            // Determine dominant frequency band
-            let dominantBand = 'mid';
-            let maxValue = bands.mid;
-            if (bands.bass > maxValue) { dominantBand = 'bass'; maxValue = bands.bass; }
-            if (bands.lowMid > maxValue) { dominantBand = 'lowMid'; maxValue = bands.lowMid; }
-            if (bands.highMid > maxValue) { dominantBand = 'highMid'; maxValue = bands.highMid; }
-            if (bands.treble > maxValue) { dominantBand = 'treble'; maxValue = bands.treble; }
+            // Draw black circle background for Chi-Rho
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.9)';
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, size * 1.8, 0, Math.PI * 2);
+            ctx.fill();
             
-            // Color based on dominant frequency
-            switch(dominantBand) {
-                case 'bass':
-                    ctx.strokeStyle = 'rgba(255, 50, 150, 0.9)'; // Purple-red for bass
-                    ctx.shadowColor = 'rgba(255, 0, 100, 1)';
-                    break;
-                case 'lowMid':
-                    ctx.strokeStyle = 'rgba(255, 150, 0, 0.9)'; // Orange
-                    ctx.shadowColor = 'rgba(255, 100, 0, 1)';
-                    break;
-                case 'mid':
-                    ctx.strokeStyle = 'rgba(255, 255, 100, 0.9)'; // Yellow
-                    ctx.shadowColor = 'rgba(255, 200, 0, 1)';
-                    break;
-                case 'highMid':
-                    ctx.strokeStyle = 'rgba(100, 255, 200, 0.9)'; // Cyan
-                    ctx.shadowColor = 'rgba(0, 255, 150, 1)';
-                    break;
-                case 'treble':
-                    ctx.strokeStyle = 'rgba(200, 200, 255, 0.9)'; // Light blue
-                    ctx.shadowColor = 'rgba(100, 150, 255, 1)';
-                    break;
-            }
-            
+            // White/gold Chi-Rho
+            ctx.strokeStyle = 'rgba(255, 255, 220, 0.95)'; // Bright white-gold
             ctx.lineWidth = 6;
             ctx.lineCap = 'round';
-            ctx.shadowBlur = 20 + (maxValue * 30); // Pulse shadow with intensity
+            ctx.shadowBlur = 25;
+            ctx.shadowColor = 'rgba(255, 200, 0, 1)'; // Golden glow
             
             // Draw X (Chi)
             ctx.beginPath();
@@ -1320,9 +1297,9 @@ function getPlayerHTML() {
             const dynamicMultiplier = 0.05 + (avgAmplitude * 3.0); // More dramatic range
             const maxRadius = baseRadius * dynamicMultiplier;
             
-            // Draw Chi-Rho - size scales with intensity, color based on frequencies
-            const chiRhoSize = 30 + (avgAmplitude * 60);
-            drawChiRho(centerX, centerY, chiRhoSize, bands);
+            // Draw Chi-Rho - size scales with intensity
+            const chiRhoSize = 30 + (avgAmplitude * 40); // Slightly smaller to fit black circle
+            drawChiRho(centerX, centerY, chiRhoSize);
             
             // Draw multiple rings of fire bars
             const bars = 200; // Even more bars for denser effect
@@ -1339,8 +1316,8 @@ function getPlayerHTML() {
                     const dataIndex = Math.floor(i * dataArray.length / bars);
                     const amplitude = dataArray[dataIndex] / 255;
                     
-                    // Instant response to amplitude changes
-                    const barHeight = amplitude * maxRadius * (1.8 - ringOffset);
+                    // Reduced bar height to see dancing ends
+                    const barHeight = amplitude * maxRadius * (0.8 - ringOffset * 0.3); // Much shorter bars
                     const angle = barWidth * i + (Date.now() * 0.0001 * (ring + 1)); // Slower, smoother rotation
                     
                     // Inner radius can shrink to nearly nothing
@@ -1350,43 +1327,27 @@ function getPlayerHTML() {
                     const x2 = centerX + Math.cos(angle) * (innerRadius + barHeight);
                     const y2 = centerY + Math.sin(angle) * (innerRadius + barHeight);
                     
-                    // Frequency-based gradient coloring
+                    // Fire gradient - from white hot to deep red
                     const gradient = ctx.createLinearGradient(x1, y1, x2, y2);
                     
-                    // Map frequency to color based on which part of spectrum this bar represents
-                    const freqPosition = i / bars; // 0 to 1 across frequency spectrum
-                    
-                    // Color based on frequency band and amplitude
-                    if (freqPosition < 0.2) {
-                        // Bass frequencies - deep reds and purples
-                        const bassIntensity = bands.bass;
-                        gradient.addColorStop(0, 'rgba(150, 0, ' + (100 * bassIntensity) + ', ' + (ringOpacity * 0.3) + ')');
-                        gradient.addColorStop(0.5, 'rgba(200, 0, ' + (50 * bassIntensity) + ', ' + (ringOpacity * 0.6) + ')');
-                        gradient.addColorStop(1, 'rgba(255, ' + (50 * amplitude) + ', 0, ' + ringOpacity + ')');
-                    } else if (freqPosition < 0.4) {
-                        // Low-mid frequencies - oranges
-                        const lowMidIntensity = bands.lowMid;
-                        gradient.addColorStop(0, 'rgba(255, ' + (100 + 100 * lowMidIntensity) + ', 0, ' + (ringOpacity * 0.3) + ')');
-                        gradient.addColorStop(0.5, 'rgba(255, ' + (150 * amplitude) + ', 0, ' + (ringOpacity * 0.7) + ')');
-                        gradient.addColorStop(1, 'rgba(255, ' + (80 * amplitude) + ', 0, ' + ringOpacity + ')');
-                    } else if (freqPosition < 0.6) {
-                        // Mid frequencies - yellows and golds
-                        const midIntensity = bands.mid;
-                        gradient.addColorStop(0, 'rgba(255, 255, ' + (100 * midIntensity) + ', ' + (ringOpacity * 0.4) + ')');
-                        gradient.addColorStop(0.5, 'rgba(255, ' + (200 + 55 * amplitude) + ', 0, ' + (ringOpacity * 0.8) + ')');
-                        gradient.addColorStop(1, 'rgba(255, ' + (150 * amplitude) + ', 0, ' + ringOpacity + ')');
-                    } else if (freqPosition < 0.8) {
-                        // High-mid frequencies - greens and cyans
-                        const highMidIntensity = bands.highMid;
-                        gradient.addColorStop(0, 'rgba(' + (100 * amplitude) + ', 255, ' + (200 * highMidIntensity) + ', ' + (ringOpacity * 0.3) + ')');
-                        gradient.addColorStop(0.5, 'rgba(' + (150 * amplitude) + ', 255, ' + (100 * amplitude) + ', ' + (ringOpacity * 0.6) + ')');
-                        gradient.addColorStop(1, 'rgba(0, ' + (200 * amplitude) + ', 255, ' + ringOpacity + ')');
+                    // Fire colors based on amplitude
+                    if (amplitude > 0.7) {
+                        // Hot white/yellow core
+                        gradient.addColorStop(0, 'rgba(255, 255, 200, ' + (ringOpacity * 0.3) + ')');
+                        gradient.addColorStop(0.3, 'rgba(255, 245, 100, ' + (ringOpacity * 0.5) + ')');
+                        gradient.addColorStop(0.6, 'rgba(255, 200, 0, ' + (ringOpacity * 0.8) + ')');
+                        gradient.addColorStop(1, 'rgba(255, 100, 0, ' + ringOpacity + ')');
+                    } else if (amplitude > 0.4) {
+                        // Orange flames
+                        gradient.addColorStop(0, 'rgba(255, 200, 0, ' + (ringOpacity * 0.2) + ')');
+                        gradient.addColorStop(0.4, 'rgba(255, 150, 0, ' + (ringOpacity * 0.6) + ')');
+                        gradient.addColorStop(0.7, 'rgba(255, 80, 0, ' + (ringOpacity * 0.8) + ')');
+                        gradient.addColorStop(1, 'rgba(200, 50, 0, ' + ringOpacity + ')');
                     } else {
-                        // Treble frequencies - blues and whites
-                        const trebleIntensity = bands.treble;
-                        gradient.addColorStop(0, 'rgba(' + (200 * trebleIntensity) + ', ' + (200 * trebleIntensity) + ', 255, ' + (ringOpacity * 0.4) + ')');
-                        gradient.addColorStop(0.5, 'rgba(' + (100 * amplitude) + ', ' + (150 * amplitude) + ', 255, ' + (ringOpacity * 0.7) + ')');
-                        gradient.addColorStop(1, 'rgba(' + (255 * amplitude) + ', ' + (255 * amplitude) + ', 255, ' + ringOpacity + ')');
+                        // Red embers
+                        gradient.addColorStop(0, 'rgba(255, 100, 0, ' + (ringOpacity * 0.1) + ')');
+                        gradient.addColorStop(0.5, 'rgba(200, 50, 0, ' + (ringOpacity * 0.4) + ')');
+                        gradient.addColorStop(1, 'rgba(150, 0, 0, ' + (ringOpacity * 0.7) + ')');
                     }
                     
                     ctx.strokeStyle = gradient;
@@ -1394,18 +1355,8 @@ function getPlayerHTML() {
                     ctx.lineCap = 'round';
                     ctx.shadowBlur = 10 + (amplitude * 20);
                     
-                    // Frequency-based shadow colors
-                    if (freqPosition < 0.2) {
-                        ctx.shadowColor = 'rgba(255, 0, 100, ' + (0.4 + amplitude * 0.4) + ')';
-                    } else if (freqPosition < 0.4) {
-                        ctx.shadowColor = 'rgba(255, 150, 0, ' + (0.4 + amplitude * 0.4) + ')';
-                    } else if (freqPosition < 0.6) {
-                        ctx.shadowColor = 'rgba(255, 255, 0, ' + (0.3 + amplitude * 0.5) + ')';
-                    } else if (freqPosition < 0.8) {
-                        ctx.shadowColor = 'rgba(0, 255, 200, ' + (0.3 + amplitude * 0.4) + ')';
-                    } else {
-                        ctx.shadowColor = 'rgba(150, 150, 255, ' + (0.4 + amplitude * 0.4) + ')';
-                    }
+                    // Fire shadow colors
+                    ctx.shadowColor = amplitude > 0.5 ? 'rgba(255, 150, 0, 0.8)' : 'rgba(255, 50, 0, 0.6)';
                     
                     ctx.beginPath();
                     ctx.moveTo(x1, y1);
