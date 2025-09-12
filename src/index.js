@@ -89,6 +89,26 @@ export default {
       return handleUpload(request, env);
     }
     
+    // Handle minutes counter endpoints
+    if (url.pathname === '/api/minutes') {
+      if (request.method === 'POST') {
+        // Increment minutes counter
+        const minutes = parseFloat(url.searchParams.get('minutes') || '0.25'); // Default to 15 seconds
+        const current = parseFloat(await env.RADIO_KV.get('global_minutes_served') || '0');
+        const updated = current + minutes;
+        await env.RADIO_KV.put('global_minutes_served', updated.toString());
+        return new Response(JSON.stringify({ total: updated }), {
+          headers: { 'Content-Type': 'application/json' }
+        });
+      } else {
+        // GET - return current total
+        const total = parseFloat(await env.RADIO_KV.get('global_minutes_served') || '0');
+        return new Response(JSON.stringify({ total }), {
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+    }
+    
     return new Response(getPlayerHTML(), {
       headers: { 'Content-Type': 'text/html' }
     });
@@ -516,6 +536,12 @@ function getPlayerHTML() {
                 <p id="status" class="text-gray-700 text-sm font-medium drop-shadow-sm">Press play to Hear the Word of God</p>
             </div>
 
+            <!-- Global Minutes Counter -->
+            <div class="bg-white/20 backdrop-blur-sm rounded-lg p-3 mb-4 text-center">
+                <p class="text-gray-600 text-xs uppercase tracking-widest font-serif mb-1">Scripture Served Globally</p>
+                <p id="minutesCounter" class="text-xl font-bold text-amber-700 font-serif">-- minutes</p>
+            </div>
+
             <div class="glass-intense p-4 border-t border-white/30">
                 <div class="text-center">
                     <div class="flex justify-center mb-2">
@@ -578,6 +604,7 @@ function getPlayerHTML() {
         let nowPlayingInterval;
         let timeUpdateInterval;
         let crossfadeTimeout = null;
+        let minutesCounterInterval;
         let isTransitioning = false; // Prevent multiple crossfades
         let trackHistory = []; // Store previously played tracks with metadata
         let historyIndex = -1; // Current position in history
@@ -780,6 +807,16 @@ function getPlayerHTML() {
                             const oldAudio = currentAudio;
                             const oldGain = currentGain;
                             
+                            // Remove event listeners from old audio to prevent double-triggering
+                            if (oldAudio._listeners) {
+                                Object.keys(oldAudio._listeners).forEach(event => {
+                                    oldAudio._listeners[event].forEach(listener => {
+                                        oldAudio.removeEventListener(event, listener);
+                                    });
+                                });
+                                delete oldAudio._listeners;
+                            }
+                            
                             // Start crossfade: both tracks playing, volumes crossfading
                             crossfade(oldGain, nextGain, 1000);
                             
@@ -793,6 +830,15 @@ function getPlayerHTML() {
                         } else {
                             // No crossfade - immediate switch
                             if (currentAudio) {
+                                // Remove event listeners from old audio
+                                if (currentAudio._listeners) {
+                                    Object.keys(currentAudio._listeners).forEach(event => {
+                                        currentAudio._listeners[event].forEach(listener => {
+                                            currentAudio.removeEventListener(event, listener);
+                                        });
+                                    });
+                                    delete currentAudio._listeners;
+                                }
                                 currentAudio.pause();
                                 currentAudio.src = '';
                             }
@@ -848,6 +894,7 @@ function getPlayerHTML() {
             status.textContent = 'Streaming The Word of God';
             isPlaying = true;
             startTimeUpdates();
+            startMinutesCounter();
         }
 
         function setStoppedState() {
@@ -857,6 +904,7 @@ function getPlayerHTML() {
             status.textContent = 'Press play to Hear The Word of God';
             isPlaying = false;
             stopTimeUpdates();
+            stopMinutesCounter();
             timeline.style.width = '0%';
             currentTimeEl.textContent = '0:00';
             durationEl.textContent = '0:00';
@@ -997,11 +1045,25 @@ function getPlayerHTML() {
             audio._listeners.ended = [endedListener];
 
             const errorListener = (e) => {
-                console.log('Audio error:', e);
-                if (isPlaying && !isTransitioning) {
-                    setTimeout(() => {
-                        playNewSong(false);
-                    }, 1000);
+                console.error('Audio error:', e);
+                // Only switch songs on fatal errors, not network hiccups
+                if (audio.error && audio.error.code === MediaError.MEDIA_ERR_DECODE) {
+                    console.error('Fatal decode error, switching to next track');
+                    if (isPlaying && !isTransitioning) {
+                        setTimeout(() => {
+                            playNewSong(false);
+                        }, 1000);
+                    }
+                } else if (audio.error && audio.error.code === MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED) {
+                    console.error('Source not supported, switching to next track');
+                    if (isPlaying && !isTransitioning) {
+                        setTimeout(() => {
+                            playNewSong(false);
+                        }, 1000);
+                    }
+                } else {
+                    // For network errors (MEDIA_ERR_NETWORK) or aborts, just log and let it recover
+                    console.log('Non-fatal error, attempting to continue playback');
                 }
             };
             audio.addEventListener('error', errorListener);
@@ -1011,7 +1073,70 @@ function getPlayerHTML() {
             // The browser will handle buffering automatically
         }
 
+        // Global minutes counter functions
+        function updateMinutesCounter() {
+            fetch('/api/minutes')
+                .then(response => response.json())
+                .then(data => {
+                    const minutes = Math.floor(data.total);
+                    const hours = Math.floor(minutes / 60);
+                    const days = Math.floor(hours / 24);
+                    
+                    let display;
+                    if (days > 0) {
+                        display = days.toLocaleString() + ' days';
+                    } else if (hours > 0) {
+                        display = hours.toLocaleString() + ' hours';
+                    } else {
+                        display = minutes.toLocaleString() + ' minutes';
+                    }
+                    
+                    document.getElementById('minutesCounter').textContent = display;
+                })
+                .catch(error => console.error('Error fetching minutes counter:', error));
+        }
+        
+        function incrementMinutesCounter() {
+            // Increment by 0.25 minutes (15 seconds)
+            fetch('/api/minutes?minutes=0.25', { method: 'POST' })
+                .then(response => response.json())
+                .then(data => {
+                    const minutes = Math.floor(data.total);
+                    const hours = Math.floor(minutes / 60);
+                    const days = Math.floor(hours / 24);
+                    
+                    let display;
+                    if (days > 0) {
+                        display = days.toLocaleString() + ' days';
+                    } else if (hours > 0) {
+                        display = hours.toLocaleString() + ' hours';
+                    } else {
+                        display = minutes.toLocaleString() + ' minutes';
+                    }
+                    
+                    document.getElementById('minutesCounter').textContent = display;
+                })
+                .catch(error => console.error('Error incrementing counter:', error));
+        }
+        
+        function startMinutesCounter() {
+            // Increment every 15 seconds while playing
+            minutesCounterInterval = setInterval(incrementMinutesCounter, 15000);
+        }
+        
+        function stopMinutesCounter() {
+            if (minutesCounterInterval) {
+                clearInterval(minutesCounterInterval);
+                minutesCounterInterval = null;
+            }
+        }
+        
+        // Initialize counter on page load
+        updateMinutesCounter();
         updateNowPlaying();
+        
+        // Update counter every 30 seconds even when not playing
+        setInterval(updateMinutesCounter, 30000);
     </script>
 </body>
 </html>`;
