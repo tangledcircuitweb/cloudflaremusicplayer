@@ -1274,11 +1274,11 @@ function getPlayerHTML() {
             // Draw 3 circles of 128 frequency bars each with rotation
             const bars = 128; // 128 frequency bins across the spectrum
             const barWidth = (Math.PI * 2) / bars;
-            const circles = 3; // 3 concentric circles
+            const circles = 5; // 5 concentric circles for maximum depth
             
             for (let circle = 0; circle < circles; circle++) {
-                const circleOffset = circle * 0.15; // Spacing between circles
-                const circleOpacity = 1 - (circle * 0.25); // Outer circles more transparent
+                const circleOffset = circle * 0.12; // Tighter spacing for 5 circles
+                const circleOpacity = 1 - (circle * 0.18); // Gradual fade for 5 circles
                 const rotationSpeed = 0.0001 + (circle * 0.00005); // Different rotation speeds
                 const rotationDirection = circle % 2 === 0 ? 1 : -1; // Alternate rotation direction
                 
@@ -1286,14 +1286,14 @@ function getPlayerHTML() {
                     // Direct frequency mapping - each bar is a specific frequency
                     const amplitude = dataArray[i] / 255;
                     
-                    // More visible bar heights - adjusted for multiple circles
-                    const barHeight = (amplitude * amplitude) * maxRadius * (2.5 - circleOffset * 3);
+                    // Bar heights adjusted for 5 circles
+                    const barHeight = (amplitude * amplitude) * maxRadius * (2.2 - circleOffset * 2.5);
                     
                     // Position each frequency bar with rotation
                     const angle = (barWidth * i) + (performance.now() * rotationSpeed * rotationDirection);
                     
-                    // Start from different radii for each circle
-                    const innerRadius = protectedRadius + 5 + (circle * maxRadius * 0.15);
+                    // Start from different radii for 5 circles
+                    const innerRadius = protectedRadius + 5 + (circle * maxRadius * 0.1);
                     const x1 = centerX + Math.cos(angle) * innerRadius;
                     const y1 = centerY + Math.sin(angle) * innerRadius;
                     const x2 = centerX + Math.cos(angle) * (innerRadius + barHeight);
