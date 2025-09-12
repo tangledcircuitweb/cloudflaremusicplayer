@@ -1234,15 +1234,15 @@ function getPlayerHTML() {
             ctx.lineTo(centerX - size, centerY + size);
             ctx.stroke();
             
-            // Draw P (Rho) - vertical stem through the center
+            // Draw P (Rho) - vertical stem through the center, extending higher
             ctx.beginPath();
             ctx.moveTo(centerX, centerY + size * 1.4);
-            ctx.lineTo(centerX, centerY - size * 1.2);
+            ctx.lineTo(centerX, centerY - size * 1.6); // Extended higher to avoid overlap
             ctx.stroke();
             
-            // Draw the loop of P (full semicircle on the right)
+            // Draw the loop of P (positioned higher on the stem)
             ctx.beginPath();
-            ctx.arc(centerX, centerY - size * 0.5, size * 0.4, -Math.PI/2, Math.PI/2, false);
+            ctx.arc(centerX, centerY - size * 0.8, size * 0.35, -Math.PI/2, Math.PI/2, false); // Moved up and slightly smaller
             ctx.stroke();
             
             ctx.restore();
