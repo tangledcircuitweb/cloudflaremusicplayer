@@ -1299,6 +1299,7 @@ function getPlayerHTML() {
             
             // Draw Chi-Rho - size scales with intensity
             const chiRhoSize = 30 + (avgAmplitude * 40); // Slightly smaller to fit black circle
+            const protectedRadius = chiRhoSize * 1.8; // Radius of the black circle
             drawChiRho(centerX, centerY, chiRhoSize);
             
             // Draw multiple rings of fire bars
@@ -1320,8 +1321,8 @@ function getPlayerHTML() {
                     const barHeight = amplitude * maxRadius * (0.8 - ringOffset * 0.3); // Much shorter bars
                     const angle = barWidth * i + (Date.now() * 0.0001 * (ring + 1)); // Slower, smoother rotation
                     
-                    // Inner radius can shrink to nearly nothing
-                    const innerRadius = maxRadius * (0.05 + ringOffset) * dynamicMultiplier;
+                    // Inner radius starts from outside the Chi-Rho's black circle
+                    const innerRadius = protectedRadius + (ringOffset * maxRadius * 0.3); // Start outside protected zone
                     const x1 = centerX + Math.cos(angle) * innerRadius;
                     const y1 = centerY + Math.sin(angle) * innerRadius;
                     const x2 = centerX + Math.cos(angle) * (innerRadius + barHeight);
