@@ -1249,37 +1249,6 @@ function getPlayerHTML() {
             // Get fresh data every frame for tighter sync
             analyser.getByteFrequencyData(dataArray);
             
-            // Analyze frequency bands
-            const bands = {
-                bass: 0,      // 0-250Hz (low frequencies)
-                lowMid: 0,    // 250-500Hz
-                mid: 0,       // 500-2000Hz
-                highMid: 0,   // 2000-4000Hz  
-                treble: 0     // 4000Hz+ (high frequencies)
-            };
-            
-            // Calculate band averages (assuming 44.1kHz sample rate)
-            const nyquist = 22050; // Half of 44.1kHz
-            const binHz = nyquist / dataArray.length;
-            
-            for (let i = 0; i < dataArray.length; i++) {
-                const freq = i * binHz;
-                const value = dataArray[i] / 255;
-                
-                if (freq < 250) bands.bass += value;
-                else if (freq < 500) bands.lowMid += value;
-                else if (freq < 2000) bands.mid += value;
-                else if (freq < 4000) bands.highMid += value;
-                else bands.treble += value;
-            }
-            
-            // Normalize band values
-            bands.bass /= Math.floor(250 / binHz);
-            bands.lowMid /= Math.floor(250 / binHz);
-            bands.mid /= Math.floor(1500 / binHz);
-            bands.highMid /= Math.floor(2000 / binHz);
-            bands.treble /= Math.floor((nyquist - 4000) / binHz);
-            
             // Ultra-fast fade for maximum responsiveness
             ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -1294,13 +1263,11 @@ function getPlayerHTML() {
             }
             avgAmplitude = avgAmplitude / dataArray.length / 255;
             
-            // Ultra-responsive dynamic radius
-            const baseRadius = Math.max(canvas.width, canvas.height) * 0.7;
-            const dynamicMultiplier = 0.02 + (avgAmplitude * 4.0); // Even more dramatic range
-            const maxRadius = baseRadius * dynamicMultiplier;
+            // Fixed radius for consistent visualization
+            const maxRadius = Math.min(canvas.width, canvas.height) * 0.45; // Use 45% of screen size
             
-            // Draw Chi-Rho - size scales with intensity
-            const chiRhoSize = 30 + (avgAmplitude * 40); // Slightly smaller to fit black circle
+            // Draw Chi-Rho - fixed size for consistency
+            const chiRhoSize = 40; // Fixed size
             const protectedRadius = chiRhoSize * 1.8; // Radius of the black circle
             drawChiRho(centerX, centerY, chiRhoSize);
             
@@ -1312,8 +1279,8 @@ function getPlayerHTML() {
                 // Direct frequency mapping - each bar is a specific frequency
                 const amplitude = dataArray[i] / 255;
                 
-                // Cubed response for dramatic effect
-                const barHeight = (amplitude * amplitude * amplitude) * maxRadius * 1.5;
+                // More visible bar heights - squared for punch, scaled way up
+                const barHeight = (amplitude * amplitude) * maxRadius * 3.5;
                 
                 // Position each frequency bar around the circle
                 const angle = (barWidth * i) - Math.PI / 2; // Start from top
@@ -1395,30 +1362,7 @@ function getPlayerHTML() {
                 ctx.stroke();
             }
             
-            // Add flickering glow effect that scales with intensity
-            const glowIntensity = Math.sin(Date.now() * 0.003) * 0.5 + 0.5;
-            const glowSize = maxRadius * 0.1 * dynamicMultiplier;
-            
-            // Multiple glow layers for more dramatic effect
-            for (let i = 0; i < 3; i++) {
-                ctx.shadowBlur = (30 + i * 20) * glowIntensity * dynamicMultiplier;
-                ctx.shadowColor = 'rgba(255, ' + (150 - i * 30) + ', 0, ' + (0.4 - i * 0.1) + ')';
-                ctx.strokeStyle = 'rgba(255, ' + (200 - i * 40) + ', 0, ' + (0.2 - i * 0.05) + ')';
-                ctx.lineWidth = 2 + i;
-                ctx.beginPath();
-                ctx.arc(centerX, centerY, glowSize * (1 + i * 0.3), 0, Math.PI * 2);
-                ctx.stroke();
-            }
-            
-            // Add pulsing core brightness based on average amplitude
-            if (avgAmplitude > 0.3) {
-                ctx.shadowBlur = 100 * avgAmplitude;
-                ctx.shadowColor = 'rgba(255, 255, 200, ' + (avgAmplitude * 0.5) + ')';
-                ctx.fillStyle = 'rgba(255, 255, 230, ' + (avgAmplitude * 0.1) + ')';
-                ctx.beginPath();
-                ctx.arc(centerX, centerY, chiRhoSize * 0.5, 0, Math.PI * 2);
-                ctx.fill();
-            }
+            // Removed glow effects - pure frequency bars only
         }
         
         function startVisualizer() {
