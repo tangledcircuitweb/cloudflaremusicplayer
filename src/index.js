@@ -73,7 +73,16 @@ export default {
     
     // Handle streaming with optional seeking
     if (url.pathname.startsWith('/stream')) {
-      return handleStreamWithSeek(request, env);
+      try {
+        return await handleStreamWithSeek(request, env);
+      } catch (error) {
+        console.error('Stream error:', error);
+        // Return a 503 Service Unavailable if KV limits are exceeded
+        if (error.message && error.message.includes('limit exceeded')) {
+          return new Response('Service temporarily unavailable', { status: 503 });
+        }
+        return new Response('Internal server error', { status: 500 });
+      }
     }
     
     // Handle playlist endpoint
@@ -92,14 +101,19 @@ export default {
     // Handle minutes counter endpoints
     if (url.pathname === '/api/minutes') {
       if (request.method === 'POST') {
-        // Increment minutes counter
-        const minutes = parseFloat(url.searchParams.get('minutes') || '0.25'); // Default to 15 seconds
-        const current = parseFloat(await env.RADIO_KV.get('global_minutes_served') || '0');
-        const updated = current + minutes;
-        await env.RADIO_KV.put('global_minutes_served', updated.toString());
-        return new Response(JSON.stringify({ total: updated }), {
-          headers: { 'Content-Type': 'application/json' }
-        });
+        // Temporarily disable minutes counter writes to avoid KV write limits
+        // Just return a mock response for now
+        try {
+          const current = parseFloat(await env.RADIO_KV.get('global_minutes_served') || '0');
+          // Don't actually write, just return the current value
+          return new Response(JSON.stringify({ total: current }), {
+            headers: { 'Content-Type': 'application/json' }
+          });
+        } catch (error) {
+          return new Response(JSON.stringify({ total: 0 }), {
+            headers: { 'Content-Type': 'application/json' }
+          });
+        }
       } else {
         // GET - return current total
         const total = parseFloat(await env.RADIO_KV.get('global_minutes_served') || '0');
@@ -253,8 +267,8 @@ async function handleStreamWithSeek(request, env) {
     return new Response('Audio not found', { status: 404 });
   }
   
-  // Update current song
-  await env.RADIO_KV.put('__current_song', filename);
+  // Remove current song update to avoid KV write limits
+  // await env.RADIO_KV.put('__current_song', filename);
   
   // Handle range requests for scrubbing
   const range = request.headers.get('range');
@@ -1189,15 +1203,15 @@ function getPlayerHTML() {
             ctx.lineTo(centerX - size, centerY + size);
             ctx.stroke();
             
-            // Draw P (Rho) - vertical line with loop
+            // Draw P (Rho) - vertical stem through the center
             ctx.beginPath();
-            ctx.moveTo(centerX, centerY + size * 1.2);
-            ctx.lineTo(centerX, centerY - size * 0.6);
+            ctx.moveTo(centerX, centerY + size * 1.4);
+            ctx.lineTo(centerX, centerY - size * 1.2);
             ctx.stroke();
             
-            // Draw the loop of P
+            // Draw the loop of P (full semicircle on the right)
             ctx.beginPath();
-            ctx.arc(centerX, centerY - size * 0.8, size * 0.3, 0, Math.PI, true);
+            ctx.arc(centerX, centerY - size * 0.5, size * 0.4, -Math.PI/2, Math.PI/2, false);
             ctx.stroke();
             
             ctx.restore();
@@ -1218,32 +1232,49 @@ function getPlayerHTML() {
             analyser.getByteFrequencyData(dataArray);
             
             // Semi-transparent black background for trail effect
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.08)';
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.05)';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
             
             const centerX = canvas.width / 2;
             const centerY = canvas.height / 2;
-            const maxRadius = Math.min(canvas.width, canvas.height) * 0.45; // Much bigger
             
-            // Draw Chi-Rho in center with glow
-            drawChiRho(centerX, centerY, 60);
+            // Calculate average amplitude for overall fire intensity
+            let avgAmplitude = 0;
+            for (let i = 0; i < dataArray.length; i++) {
+                avgAmplitude += dataArray[i];
+            }
+            avgAmplitude = avgAmplitude / dataArray.length / 255;
+            
+            // Dynamic radius - can grow larger than screen
+            const baseRadius = Math.max(canvas.width, canvas.height) * 0.7;
+            const dynamicMultiplier = 0.1 + (avgAmplitude * 2.5); // From 10% to 260% of base
+            const maxRadius = baseRadius * dynamicMultiplier;
+            
+            // Draw Chi-Rho - size scales with intensity
+            const chiRhoSize = 30 + (avgAmplitude * 60);
+            drawChiRho(centerX, centerY, chiRhoSize);
             
             // Draw multiple rings of fire bars
-            const bars = 180; // Many more bars for dense fire effect
+            const bars = 200; // Even more bars for denser effect
             const barWidth = (Math.PI * 2) / bars;
             
-            // Multiple concentric rings for depth
-            for (let ring = 0; ring < 3; ring++) {
-                const ringOffset = ring * 0.15;
-                const ringOpacity = 1 - (ring * 0.3);
+            // More rings for depth when fire is big
+            const ringCount = Math.floor(3 + avgAmplitude * 3); // 3-6 rings based on intensity
+            
+            for (let ring = 0; ring < ringCount; ring++) {
+                const ringOffset = ring * 0.12;
+                const ringOpacity = 1 - (ring * 0.15);
                 
                 for (let i = 0; i < bars; i++) {
                     const dataIndex = Math.floor(i * dataArray.length / bars);
                     const amplitude = dataArray[dataIndex] / 255;
-                    const barHeight = amplitude * maxRadius * (1.2 - ringOffset);
-                    const angle = barWidth * i + (Date.now() * 0.0001 * (ring + 1)); // Rotating effect
                     
-                    const innerRadius = maxRadius * (0.2 + ringOffset);
+                    // More dramatic height variations
+                    const barHeight = amplitude * maxRadius * (1.5 - ringOffset);
+                    const angle = barWidth * i + (Date.now() * 0.0002 * (ring + 1)); // Faster rotation
+                    
+                    // Inner radius can shrink to nearly nothing
+                    const innerRadius = maxRadius * (0.05 + ringOffset) * dynamicMultiplier;
                     const x1 = centerX + Math.cos(angle) * innerRadius;
                     const y1 = centerY + Math.sin(angle) * innerRadius;
                     const x2 = centerX + Math.cos(angle) * (innerRadius + barHeight);
@@ -1285,15 +1316,30 @@ function getPlayerHTML() {
                 }
             }
             
-            // Add flickering glow effect
-            const glowIntensity = Math.sin(Date.now() * 0.002) * 0.5 + 0.5;
-            ctx.shadowBlur = 50 * glowIntensity;
-            ctx.shadowColor = 'rgba(255, 100, 0, 0.3)';
-            ctx.strokeStyle = 'rgba(255, 150, 0, 0.1)';
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            ctx.arc(centerX, centerY, maxRadius * 0.2, 0, Math.PI * 2);
-            ctx.stroke();
+            // Add flickering glow effect that scales with intensity
+            const glowIntensity = Math.sin(Date.now() * 0.003) * 0.5 + 0.5;
+            const glowSize = maxRadius * 0.1 * dynamicMultiplier;
+            
+            // Multiple glow layers for more dramatic effect
+            for (let i = 0; i < 3; i++) {
+                ctx.shadowBlur = (30 + i * 20) * glowIntensity * dynamicMultiplier;
+                ctx.shadowColor = 'rgba(255, ' + (150 - i * 30) + ', 0, ' + (0.4 - i * 0.1) + ')';
+                ctx.strokeStyle = 'rgba(255, ' + (200 - i * 40) + ', 0, ' + (0.2 - i * 0.05) + ')';
+                ctx.lineWidth = 2 + i;
+                ctx.beginPath();
+                ctx.arc(centerX, centerY, glowSize * (1 + i * 0.3), 0, Math.PI * 2);
+                ctx.stroke();
+            }
+            
+            // Add pulsing core brightness based on average amplitude
+            if (avgAmplitude > 0.3) {
+                ctx.shadowBlur = 100 * avgAmplitude;
+                ctx.shadowColor = 'rgba(255, 255, 200, ' + (avgAmplitude * 0.5) + ')';
+                ctx.fillStyle = 'rgba(255, 255, 230, ' + (avgAmplitude * 0.1) + ')';
+                ctx.beginPath();
+                ctx.arc(centerX, centerY, chiRhoSize * 0.5, 0, Math.PI * 2);
+                ctx.fill();
+            }
         }
         
         function startVisualizer() {
