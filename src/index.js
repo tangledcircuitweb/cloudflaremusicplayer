@@ -1131,11 +1131,13 @@ function getPlayerHTML() {
                     
                     let display;
                     if (days > 0) {
-                        display = days.toLocaleString() + ' days';
+                        const remainingHours = hours % 24;
+                        display = days.toLocaleString() + ' days, ' + remainingHours + ':' + String(minutes % 60).padStart(2, '0');
                     } else if (hours > 0) {
-                        display = hours.toLocaleString() + ' hours';
+                        const remainingMinutes = minutes % 60;
+                        display = hours + ':' + String(remainingMinutes).padStart(2, '0');
                     } else {
-                        display = minutes.toLocaleString() + ' minutes';
+                        display = '0:' + String(minutes).padStart(2, '0');
                     }
                     
                     document.getElementById('minutesCounter').textContent = display;
@@ -1154,11 +1156,13 @@ function getPlayerHTML() {
                     
                     let display;
                     if (days > 0) {
-                        display = days.toLocaleString() + ' days';
+                        const remainingHours = hours % 24;
+                        display = days.toLocaleString() + ' days, ' + remainingHours + ':' + String(minutes % 60).padStart(2, '0');
                     } else if (hours > 0) {
-                        display = hours.toLocaleString() + ' hours';
+                        const remainingMinutes = minutes % 60;
+                        display = hours + ':' + String(remainingMinutes).padStart(2, '0');
                     } else {
-                        display = minutes.toLocaleString() + ' minutes';
+                        display = '0:' + String(minutes).padStart(2, '0');
                     }
                     
                     document.getElementById('minutesCounter').textContent = display;
