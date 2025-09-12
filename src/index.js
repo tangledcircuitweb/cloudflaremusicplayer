@@ -2,13 +2,13 @@ async function handleStaticAsset(request, env) {
   const url = new URL(request.url);
   const path = url.pathname;
   
-  // Handle different image requests - serve chirho.png from R2 bucket
+  // Handle different image requests - serve chirho.png from KV storage
   if (path === '/og-image.jpg' || path === '/twitter-image.jpg' || 
       path === '/apple-touch-icon.png' || path === '/favicon-32x32.png' || 
       path === '/favicon-16x16.png' || path === '/favicon.ico') {
     
     try {
-      const imageObject = await env.MUSIC_BUCKET.get('chirho.png');
+      const imageObject = await env.RADIO_KV.get('assets:chirho.png', 'arrayBuffer');
       if (!imageObject) {
         return new Response('Image not found', { status: 404 });
       }
@@ -21,7 +21,7 @@ async function handleStaticAsset(request, env) {
         contentType = 'image/x-icon';
       }
       
-      return new Response(imageObject.body, {
+      return new Response(imageObject, {
         headers: {
           'Content-Type': contentType,
           'Cache-Control': 'public, max-age=31536000',
@@ -42,20 +42,19 @@ export default {
     const url = new URL(request.url);
     
     // Handle static assets FIRST before other routes
-    if (url.pathname === '/og-image.jpg' || url.pathname === '/twitter-image.jpg' || 
+    if (url.pathname === '/chirho.png' || url.pathname === '/og-image.jpg' || url.pathname === '/twitter-image.jpg' || 
         url.pathname === '/apple-touch-icon.png' || url.pathname === '/favicon-32x32.png' || 
         url.pathname === '/favicon-16x16.png' || url.pathname === '/favicon.ico') {
       
       try {
-        const imageData = await env.RADIO_KV.get('chirho.png', 'arrayBuffer');
+        const imageData = await env.RADIO_KV.get('assets:chirho.png', 'arrayBuffer');
         if (!imageData) {
           return new Response('Image not found', { status: 404 });
         }
         
+        // Always serve as PNG since chirho.png is a PNG file
         let contentType = 'image/png';
-        if (url.pathname.includes('.jpg')) {
-          contentType = 'image/jpeg';
-        } else if (url.pathname.includes('.ico')) {
+        if (url.pathname.includes('.ico')) {
           contentType = 'image/x-icon';
         }
         
@@ -327,7 +326,7 @@ function getPlayerHTML() {
     <!-- Open Graph Meta Tags -->
     <meta property="og:title" content="Epic Scripture - Psalms Audio Stream">
     <meta property="og:description" content="Experience the beauty of Scripture through continuous audio streaming of the Psalms. Peaceful, meditative, and spiritually enriching.">
-    <meta property="og:image" content="https://epicscripture.com/og-image.jpg">
+    <meta property="og:image" content="https://epicscripture.com/chirho.png">
     <meta property="og:image:width" content="1200">
     <meta property="og:image:height" content="630">
     <meta property="og:url" content="https://epicscripture.com">
@@ -338,7 +337,7 @@ function getPlayerHTML() {
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="Epic Scripture - Psalms Audio Stream">
     <meta name="twitter:description" content="Experience the beauty of Scripture through continuous audio streaming of the Psalms. Peaceful, meditative, and spiritually enriching.">
-    <meta name="twitter:image" content="https://epicscripture.com/twitter-image.jpg">
+    <meta name="twitter:image" content="https://epicscripture.com/chirho.png">
     
     <!-- Apple Meta Tags -->
     <meta name="mobile-web-app-capable" content="yes">
@@ -347,9 +346,46 @@ function getPlayerHTML() {
     <link rel="apple-touch-icon" href="https://epicscripture.com/apple-touch-icon.png">
     
     <!-- Favicon -->
-    <link rel="icon" type="image/x-icon" href="https://epicscripture.com/favicon.ico">
-    <link rel="icon" type="image/png" sizes="32x32" href="https://epicscripture.com/favicon-32x32.png">
-    <link rel="icon" type="image/png" sizes="16x16" href="https://epicscripture.com/favicon-16x16.png">
+    <link rel="icon" type="image/x-icon" href="/favicon.ico">
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+    
+    <!-- Structured Data for Rich Snippets -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "RadioStation",
+      "name": "Epic Scripture",
+      "url": "https://epicscripture.com",
+      "logo": "https://epicscripture.com/chirho.png",
+      "description": "24/7 Christian radio streaming Psalms and Scripture with peaceful, meditative audio",
+      "image": "https://epicscripture.com/chirho.png",
+      "sameAs": [
+        "https://epicscripture.com"
+      ],
+      "potentialAction": {
+        "@type": "ListenAction",
+        "target": {
+          "@type": "EntryPoint",
+          "urlTemplate": "https://epicscripture.com",
+          "actionPlatform": [
+            "http://schema.org/DesktopWebPlatform",
+            "http://schema.org/MobileWebPlatform"
+          ]
+        },
+        "expectsAcceptanceOf": {
+          "@type": "Offer",
+          "price": "0",
+          "priceCurrency": "USD"
+        }
+      },
+      "broadcastAffiliateOf": {
+        "@type": "Organization",
+        "name": "Epic Scripture",
+        "url": "https://epicscripture.com"
+      }
+    }
+    </script>
     
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
@@ -580,7 +616,10 @@ function getPlayerHTML() {
         // Initialize Web Audio Context
         function initAudioContext() {
             if (!audioContext) {
-                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                audioContext = new (window.AudioContext || window.webkitAudioContext)({
+                    latencyHint: 'playback',  // Optimize for continuous playback, allows larger buffer
+                    sampleRate: 44100  // Standard sample rate
+                });
             }
             return audioContext;
         }
@@ -588,6 +627,8 @@ function getPlayerHTML() {
         function createAudioElement() {
             const audio = new Audio();
             audio.crossOrigin = "anonymous";
+            audio.preload = "auto";  // Preload audio data to prevent buffer underruns
+            audio.volume = 1.0;
             return audio;
         }
 
