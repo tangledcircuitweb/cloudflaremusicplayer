@@ -41,14 +41,45 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     
-    // Check for static assets first
-    const staticResponse = await handleStaticAsset(request, env);
-    if (staticResponse) {
-      return staticResponse;
+    // Handle static assets FIRST before other routes
+    if (url.pathname === '/og-image.jpg' || url.pathname === '/twitter-image.jpg' || 
+        url.pathname === '/apple-touch-icon.png' || url.pathname === '/favicon-32x32.png' || 
+        url.pathname === '/favicon-16x16.png' || url.pathname === '/favicon.ico') {
+      
+      try {
+        const imageData = await env.RADIO_KV.get('chirho.png', 'arrayBuffer');
+        if (!imageData) {
+          return new Response('Image not found', { status: 404 });
+        }
+        
+        let contentType = 'image/png';
+        if (url.pathname.includes('.jpg')) {
+          contentType = 'image/jpeg';
+        } else if (url.pathname.includes('.ico')) {
+          contentType = 'image/x-icon';
+        }
+        
+        return new Response(imageData, {
+          headers: {
+            'Content-Type': contentType,
+            'Cache-Control': 'public, max-age=31536000',
+            'Access-Control-Allow-Origin': '*'
+          }
+        });
+      } catch (error) {
+        console.error('Error serving image:', error);
+        return new Response('Error serving image', { status: 500 });
+      }
     }
     
-    if (url.pathname === '/stream') {
-      return handleStream(env);
+    // Handle streaming with optional seeking
+    if (url.pathname.startsWith('/stream')) {
+      return handleStreamWithSeek(request, env);
+    }
+    
+    // Handle playlist endpoint
+    if (url.pathname === '/playlist') {
+      return handlePlaylist(env);
     }
     
     if (url.pathname === '/now-playing') {
@@ -65,46 +96,49 @@ export default {
   }
 };
 
-async function handleStream(env) {
-  const playlist = await getPlaylist(env);
-  if (playlist.length === 0) {
-    return new Response('No songs available', { status: 404 });
-  }
-  
-  const currentSong = playlist[Math.floor(Math.random() * playlist.length)];
-  const audioObject = await env.MUSIC_BUCKET.get(currentSong);
-  
-  if (!audioObject) {
-    return new Response('Song not found', { status: 404 });
-  }
-  
-  await env.MUSIC_BUCKET.put('__current_song', currentSong);
-  
-  return new Response(audioObject.body, {
-    headers: {
-      'Content-Type': 'audio/mpeg',
-      'Cache-Control': 'no-cache',
-      'Access-Control-Allow-Origin': '*'
-    }
-  });
-}
 
 async function handleNowPlaying(env) {
-  const currentSongKey = await env.MUSIC_BUCKET.get('__current_song');
-  const songName = currentSongKey ? await currentSongKey.text() : 'Unknown';
-  
-  const verseInfo = extractVerseInfo(songName);
-  
-  return new Response(JSON.stringify({
-    song: verseInfo.title,
-    verse: verseInfo.verse,
-    book: verseInfo.book
-  }), {
-    headers: { 
-      'Content-Type': 'application/json',
-      'Access-Control-Allow-Origin': '*'
+  try {
+    const currentSong = await env.RADIO_KV.get('__current_song');
+    if (!currentSong) {
+      return new Response(JSON.stringify({ 
+        song: 'No song playing',
+        verse: '',
+        book: 'Scripture'
+      }), {
+        headers: { 
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*'
+        }
+      });
     }
-  });
+    
+    const verseInfo = extractVerseInfo(currentSong);
+    
+    return new Response(JSON.stringify({
+      song: verseInfo.title,
+      verse: verseInfo.verse,
+      book: verseInfo.book
+    }), {
+      headers: { 
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*'
+      }
+    });
+  } catch (error) {
+    console.error('Error in handleNowPlaying:', error);
+    return new Response(JSON.stringify({ 
+      song: 'Error loading',
+      verse: '',
+      book: 'Scripture'
+    }), {
+      headers: { 
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*'
+      },
+      status: 500
+    });
+  }
 }
 
 function extractVerseInfo(filename) {
@@ -143,16 +177,137 @@ async function handleUpload(request, env) {
     return new Response('No file provided', { status: 400 });
   }
   
-  const filename = `${Date.now()}-${file.name}`;
-  await env.MUSIC_BUCKET.put(filename, file.stream());
+  const filename = file.name;
+  const arrayBuffer = await file.arrayBuffer();
+  await env.RADIO_KV.put(`audio:${filename}`, arrayBuffer);
+  
+  // Update metadata
+  const metadata = await env.RADIO_KV.get('audio-metadata', 'json') || { tracks: [] };
+  if (!metadata.tracks.find(t => t.filename === filename)) {
+    metadata.tracks.push({ 
+      filename, 
+      size: arrayBuffer.byteLength,
+      uploadedAt: new Date().toISOString() 
+    });
+    await env.RADIO_KV.put('audio-metadata', JSON.stringify(metadata));
+  }
   
   return new Response(`Uploaded: ${filename}`);
 }
 
 async function getPlaylist(env) {
-  const objects = await env.MUSIC_BUCKET.list();
-  return objects.objects.filter(obj => !obj.key.startsWith('__')).map(obj => obj.key);
+  try {
+    const metadata = await env.RADIO_KV.get('audio-metadata', 'json');
+    if (metadata && metadata.tracks) {
+      return metadata.tracks.map(t => t.filename);
+    }
+    return [];
+  } catch (error) {
+    console.error('Error getting playlist:', error);
+    return [];
+  }
 }
+
+async function handleStreamWithSeek(request, env) {
+  const url = new URL(request.url);
+  const pathParts = url.pathname.split('/').filter(p => p); // Remove empty parts
+  
+  let filename = pathParts.length > 1 ? pathParts[pathParts.length - 1] : null;
+  
+  // Handle /stream or /stream?timestamp (no filename)
+  if (!filename || filename === 'stream') {
+    // No specific file, play random
+    const metadata = await env.RADIO_KV.get('audio-metadata', 'json');
+    if (!metadata || !metadata.tracks || metadata.tracks.length === 0) {
+      return new Response('No songs available', { status: 404 });
+    }
+    const randomTrack = metadata.tracks[Math.floor(Math.random() * metadata.tracks.length)];
+    filename = randomTrack.filename;
+    // Don't recursively call, just continue with the selected filename
+  }
+  
+  const seekTime = url.searchParams.get('t'); // Time in seconds
+  
+  // Get the full audio file from KV
+  const audioData = await env.RADIO_KV.get(`audio:${filename}`, 'arrayBuffer');
+  if (!audioData) {
+    return new Response('Audio not found', { status: 404 });
+  }
+  
+  // Update current song
+  await env.RADIO_KV.put('__current_song', filename);
+  
+  // Handle range requests for scrubbing
+  const range = request.headers.get('range');
+  
+  if (range || seekTime !== null) {
+    // Get timestamp index for this file
+    const indexData = await env.RADIO_KV.get(`audio-index:${filename}`, 'json');
+    
+    let start = 0;
+    let end = audioData.byteLength - 1;
+    
+    if (seekTime !== null && indexData) {
+      // Use timestamp index to find byte position
+      const second = Math.floor(parseFloat(seekTime));
+      const bytePosition = indexData.timestampIndex[second];
+      if (bytePosition !== undefined) {
+        start = bytePosition;
+      }
+    } else if (range) {
+      // Parse standard range header
+      const parts = range.replace(/bytes=/, '').split('-');
+      start = parseInt(parts[0], 10);
+      end = parts[1] ? parseInt(parts[1], 10) : audioData.byteLength - 1;
+    }
+    
+    const chunkSize = end - start + 1;
+    const chunk = audioData.slice(start, end + 1);
+    
+    return new Response(chunk, {
+      status: 206,
+      headers: {
+        'Content-Range': `bytes ${start}-${end}/${audioData.byteLength}`,
+        'Accept-Ranges': 'bytes',
+        'Content-Length': chunkSize.toString(),
+        'Content-Type': 'audio/mpeg',
+        'Cache-Control': 'public, max-age=3600',
+        'Access-Control-Allow-Origin': '*'
+      }
+    });
+  }
+  
+  // Return full file if no seeking
+  return new Response(audioData, {
+    headers: {
+      'Content-Type': 'audio/mpeg',
+      'Content-Length': audioData.byteLength.toString(),
+      'Accept-Ranges': 'bytes',
+      'Cache-Control': 'public, max-age=3600',
+      'Access-Control-Allow-Origin': '*'
+    }
+  });
+}
+
+async function handlePlaylist(env) {
+  const metadata = await env.RADIO_KV.get('audio-metadata', 'json');
+  if (!metadata) {
+    return new Response(JSON.stringify({ tracks: [] }), {
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*'
+      }
+    });
+  }
+  
+  return new Response(JSON.stringify(metadata), {
+    headers: {
+      'Content-Type': 'application/json',
+      'Access-Control-Allow-Origin': '*'
+    }
+  });
+}
+
 
 function getPlayerHTML() {
   return `<!DOCTYPE html>

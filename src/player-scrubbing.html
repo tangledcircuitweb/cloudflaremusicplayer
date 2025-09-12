@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Epic Scripture - 24/7 Bible Audio</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .scrubber {
+      position: relative;
+      height: 8px;
+      background: rgba(255, 255, 255, 0.2);
+      border-radius: 4px;
+      cursor: pointer;
+      overflow: hidden;
+    }
+    
+    .scrubber-progress {
+      height: 100%;
+      background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+      border-radius: 4px;
+      transition: width 0.1s;
+    }
+    
+    .scrubber-buffered {
+      position: absolute;
+      top: 0;
+      height: 100%;
+      background: rgba(255, 255, 255, 0.3);
+      border-radius: 4px;
+    }
+    
+    .scrubber-handle {
+      position: absolute;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      width: 16px;
+      height: 16px;
+      background: white;
+      border-radius: 50%;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+      cursor: grab;
+    }
+    
+    .scrubber-handle:active {
+      cursor: grabbing;
+      transform: translate(-50%, -50%) scale(1.2);
+    }
+    
+    .time-tooltip {
+      position: absolute;
+      bottom: 20px;
+      transform: translateX(-50%);
+      background: rgba(0, 0, 0, 0.8);
+      color: white;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 12px;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.2s;
+    }
+    
+    .scrubber:hover .time-tooltip {
+      opacity: 1;
+    }
+  </style>
+</head>
+<body class="bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 min-h-screen text-white">
+  <div class="container mx-auto px-4 py-8">
+    <h1 class="text-4xl font-bold text-center mb-8">Epic Scripture Radio</h1>
+    
+    <div class="max-w-2xl mx-auto bg-white/10 backdrop-blur-lg rounded-lg p-6">
+      <!-- Track Info -->
+      <div class="mb-6">
+        <h2 id="track-title" class="text-2xl font-semibold">Loading...</h2>
+        <p id="track-verse" class="text-gray-300">Preparing audio...</p>
+      </div>
+      
+      <!-- Audio Element (hidden) -->
+      <audio id="player" preload="metadata"></audio>
+      
+      <!-- Scrubbing Timeline -->
+      <div class="mb-4">
+        <div class="scrubber" id="scrubber">
+          <div class="scrubber-buffered" id="buffered"></div>
+          <div class="scrubber-progress" id="progress"></div>
+          <div class="scrubber-handle" id="handle"></div>
+          <div class="time-tooltip" id="tooltip">0:00</div>
+        </div>
+        <div class="flex justify-between text-sm mt-2">
+          <span id="current-time">0:00</span>
+          <span id="duration">0:00</span>
+        </div>
+      </div>
+      
+      <!-- Controls -->
+      <div class="flex justify-center gap-4">
+        <button id="prev-btn" class="bg-white/20 hover:bg-white/30 p-3 rounded-full transition">
+          <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/>
+          </svg>
+        </button>
+        
+        <button id="play-btn" class="bg-blue-600 hover:bg-blue-700 p-4 rounded-full transition">
+          <svg class="w-8 h-8" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M8 5v14l11-7z"/>
+          </svg>
+        </button>
+        
+        <button id="next-btn" class="bg-white/20 hover:bg-white/30 p-3 rounded-full transition">
+          <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/>
+          </svg>
+        </button>
+      </div>
+      
+      <!-- Playlist -->
+      <div class="mt-8">
+        <h3 class="text-lg font-semibold mb-3">Playlist</h3>
+        <div id="playlist" class="space-y-2 max-h-64 overflow-y-auto">
+          <!-- Tracks will be loaded here -->
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <script>
+    class ScrubbablePlayer {
+      constructor() {
+        this.audio = document.getElementById('player');
+        this.scrubber = document.getElementById('scrubber');
+        this.progress = document.getElementById('progress');
+        this.buffered = document.getElementById('buffered');
+        this.handle = document.getElementById('handle');
+        this.tooltip = document.getElementById('tooltip');
+        this.playBtn = document.getElementById('play-btn');
+        this.currentTimeEl = document.getElementById('current-time');
+        this.durationEl = document.getElementById('duration');
+        
+        this.playlist = [];
+        this.currentTrack = null;
+        this.isDragging = false;
+        
+        this.init();
+      }
+      
+      async init() {
+        // Load playlist
+        await this.loadPlaylist();
+        
+        // Set up event listeners
+        this.setupEventListeners();
+        
+        // Load first track
+        if (this.playlist.length > 0) {
+          this.loadTrack(this.playlist[0]);
+        }
+      }
+      
+      async loadPlaylist() {
+        try {
+          const response = await fetch('/playlist');
+          const data = await response.json();
+          this.playlist = data.tracks || [];
+          this.renderPlaylist();
+        } catch (error) {
+          console.error('Failed to load playlist:', error);
+        }
+      }
+      
+      renderPlaylist() {
+        const container = document.getElementById('playlist');
+        container.innerHTML = this.playlist.map((track, index) => `
+          <div class="bg-white/10 p-3 rounded cursor-pointer hover:bg-white/20 transition" 
+               onclick="player.loadTrack(player.playlist[${index}])">
+            <div class="font-semibold">${track.filename.replace('.mp3', '')}</div>
+            <div class="text-sm text-gray-300">${this.formatTime(track.duration)}</div>
+          </div>
+        `).join('');
+      }
+      
+      loadTrack(track) {
+        this.currentTrack = track;
+        this.audio.src = `/stream/${track.filename}`;
+        
+        // Update UI
+        document.getElementById('track-title').textContent = track.filename.replace('.mp3', '');
+        document.getElementById('track-verse').textContent = `Duration: ${this.formatTime(track.duration)}`;
+        
+        // Reset progress
+        this.progress.style.width = '0%';
+        this.handle.style.left = '0%';
+      }
+      
+      setupEventListeners() {
+        // Audio events
+        this.audio.addEventListener('timeupdate', () => this.updateProgress());
+        this.audio.addEventListener('loadedmetadata', () => this.onMetadataLoaded());
+        this.audio.addEventListener('progress', () => this.updateBuffered());
+        
+        // Play/Pause
+        this.playBtn.addEventListener('click', () => this.togglePlay());
+        
+        // Scrubbing
+        this.scrubber.addEventListener('mousedown', (e) => this.startScrub(e));
+        document.addEventListener('mousemove', (e) => this.scrub(e));
+        document.addEventListener('mouseup', () => this.endScrub());
+        
+        // Touch support
+        this.scrubber.addEventListener('touchstart', (e) => this.startScrub(e.touches[0]));
+        document.addEventListener('touchmove', (e) => this.scrub(e.touches[0]));
+        document.addEventListener('touchend', () => this.endScrub());
+        
+        // Tooltip
+        this.scrubber.addEventListener('mousemove', (e) => this.updateTooltip(e));
+        
+        // Navigation
+        document.getElementById('prev-btn').addEventListener('click', () => this.previous());
+        document.getElementById('next-btn').addEventListener('click', () => this.next());
+      }
+      
+      togglePlay() {
+        if (this.audio.paused) {
+          this.audio.play();
+          this.playBtn.innerHTML = `
+            <svg class="w-8 h-8" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z"/>
+            </svg>
+          `;
+        } else {
+          this.audio.pause();
+          this.playBtn.innerHTML = `
+            <svg class="w-8 h-8" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M8 5v14l11-7z"/>
+            </svg>
+          `;
+        }
+      }
+      
+      updateProgress() {
+        if (!this.isDragging && this.audio.duration) {
+          const percent = (this.audio.currentTime / this.audio.duration) * 100;
+          this.progress.style.width = percent + '%';
+          this.handle.style.left = percent + '%';
+          this.currentTimeEl.textContent = this.formatTime(this.audio.currentTime);
+        }
+      }
+      
+      updateBuffered() {
+        if (this.audio.buffered.length > 0) {
+          const bufferedEnd = this.audio.buffered.end(this.audio.buffered.length - 1);
+          const percent = (bufferedEnd / this.audio.duration) * 100;
+          this.buffered.style.width = percent + '%';
+        }
+      }
+      
+      onMetadataLoaded() {
+        this.durationEl.textContent = this.formatTime(this.audio.duration);
+      }
+      
+      startScrub(e) {
+        this.isDragging = true;
+        this.scrub(e);
+      }
+      
+      scrub(e) {
+        if (this.isDragging) {
+          const rect = this.scrubber.getBoundingClientRect();
+          const percent = Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100));
+          this.progress.style.width = percent + '%';
+          this.handle.style.left = percent + '%';
+          
+          if (this.audio.duration) {
+            const time = (percent / 100) * this.audio.duration;
+            this.currentTimeEl.textContent = this.formatTime(time);
+          }
+        }
+      }
+      
+      endScrub() {
+        if (this.isDragging) {
+          this.isDragging = false;
+          const percent = parseFloat(this.handle.style.left);
+          if (this.audio.duration) {
+            const time = (percent / 100) * this.audio.duration;
+            
+            // Use timestamp-based seeking
+            if (this.currentTrack) {
+              this.audio.src = `/stream/${this.currentTrack.filename}?t=${time}`;
+              this.audio.currentTime = time;
+              if (!this.audio.paused) {
+                this.audio.play();
+              }
+            }
+          }
+        }
+      }
+      
+      updateTooltip(e) {
+        const rect = this.scrubber.getBoundingClientRect();
+        const percent = ((e.clientX - rect.left) / rect.width) * 100;
+        const time = this.audio.duration ? (percent / 100) * this.audio.duration : 0;
+        
+        this.tooltip.style.left = percent + '%';
+        this.tooltip.textContent = this.formatTime(time);
+      }
+      
+      previous() {
+        const index = this.playlist.findIndex(t => t.filename === this.currentTrack.filename);
+        if (index > 0) {
+          this.loadTrack(this.playlist[index - 1]);
+        }
+      }
+      
+      next() {
+        const index = this.playlist.findIndex(t => t.filename === this.currentTrack.filename);
+        if (index < this.playlist.length - 1) {
+          this.loadTrack(this.playlist[index + 1]);
+        }
+      }
+      
+      formatTime(seconds) {
+        const mins = Math.floor(seconds / 60);
+        const secs = Math.floor(seconds % 60);
+        return `${mins}:${secs.toString().padStart(2, '0')}`;
+      }
+    }
+    
+    // Initialize player
+    const player = new ScrubbablePlayer();
+  </script>
+</body>
+</html>
