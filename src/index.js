@@ -543,6 +543,9 @@ function getPlayerHTML() {
         let timeUpdateInterval;
         let crossfadeTimeout = null;
         let isTransitioning = false; // Prevent multiple crossfades
+        let trackHistory = []; // Store previously played tracks with metadata
+        let historyIndex = -1; // Current position in history
+        let currentTrackMetadata = null; // Store current track info
 
         function formatTime(seconds) {
             const mins = Math.floor(seconds / 60);
@@ -592,65 +595,56 @@ function getPlayerHTML() {
             const source = audioContext.createMediaElementSource(audio);
             const gainNode = audioContext.createGain();
             
-            // Create gentle compressor for volume leveling
+            // Create compressor with slightly lighter settings
             const compressor = audioContext.createDynamicsCompressor();
+            compressor.threshold.setValueAtTime(-20, audioContext.currentTime);  // Was -24, now lighter
+            compressor.knee.setValueAtTime(12, audioContext.currentTime);
+            compressor.ratio.setValueAtTime(2, audioContext.currentTime);  // Was 2.5, now lighter ratio
+            compressor.attack.setValueAtTime(0.01, audioContext.currentTime);
+            compressor.release.setValueAtTime(0.25, audioContext.currentTime);
             
-            // Gentle compression settings (preserve quality)
-            compressor.threshold.setValueAtTime(-24, audioContext.currentTime); // Higher threshold = less compression
-            compressor.knee.setValueAtTime(12, audioContext.currentTime);      // Softer knee for smoother compression
-            compressor.ratio.setValueAtTime(2.5, audioContext.currentTime);    // Gentler 2.5:1 ratio
-            compressor.attack.setValueAtTime(0.01, audioContext.currentTime);  // Slower 10ms attack
-            compressor.release.setValueAtTime(0.25, audioContext.currentTime); // Longer 250ms release
-            
-            // Gentle limiter (safety only)
+            // Create limiter with exact original settings
             const limiter = audioContext.createDynamicsCompressor();
-            limiter.threshold.setValueAtTime(-3, audioContext.currentTime);    // Higher threshold
-            limiter.knee.setValueAtTime(2, audioContext.currentTime);          // Soft knee
-            limiter.ratio.setValueAtTime(8, audioContext.currentTime);         // Gentler 8:1 ratio
-            limiter.attack.setValueAtTime(0.005, audioContext.currentTime);    // 5ms attack
-            limiter.release.setValueAtTime(0.05, audioContext.currentTime);    // 50ms release
+            limiter.threshold.setValueAtTime(-3, audioContext.currentTime);
+            limiter.knee.setValueAtTime(2, audioContext.currentTime);
+            limiter.ratio.setValueAtTime(8, audioContext.currentTime);
+            limiter.attack.setValueAtTime(0.005, audioContext.currentTime);
+            limiter.release.setValueAtTime(0.05, audioContext.currentTime);
             
-            // Reduced makeup gain
+            // Makeup gain exactly as before
             const makeupGain = audioContext.createGain();
-            makeupGain.gain.setValueAtTime(1.5, audioContext.currentTime);     // +3.5dB makeup gain (reduced)
+            makeupGain.gain.setValueAtTime(1.5, audioContext.currentTime);
             
-            // Audio chain: Source → Compressor → Makeup Gain → Limiter → Volume → Output
+            // Connect the audio processing chain
             source.connect(compressor);
-            compressor.connect(makeupGain);
-            makeupGain.connect(limiter);
-            limiter.connect(gainNode);
+            compressor.connect(limiter);
+            limiter.connect(makeupGain);
+            makeupGain.connect(gainNode);
             gainNode.connect(audioContext.destination);
             
-            console.log('Audio chain: Gentle compression and limiting applied');
+            console.log('Audio chain restored: Compressor -> Limiter -> Makeup Gain (1.5x)');
             
-            return { source, gainNode, compressor, limiter, makeupGain };
+            return { source, gainNode };
         }
 
-        function crossfade(fromGain, toGain, duration = 3000) {
-            const steps = 60; // 60 steps for smooth fade
-            const stepTime = duration / steps;
-            let step = 0;
-
-            const fadeInterval = setInterval(() => {
-                step++;
-                const progress = step / steps;
-                
-                // Fade out current song
-                if (fromGain) {
-                    fromGain.gain.value = Math.max(0, 1 - progress);
-                }
-                
-                // Fade in next song
-                if (toGain) {
-                    toGain.gain.value = Math.min(1, progress);
-                }
-
-                if (step >= steps) {
-                    clearInterval(fadeInterval);
-                    if (fromGain) fromGain.gain.value = 0;
-                    if (toGain) toGain.gain.value = 1;
-                }
-            }, stepTime);
+        function crossfade(fromGain, toGain, duration = 1000) {
+            const now = audioContext.currentTime;
+            const fadeTime = duration / 1000; // Convert to seconds
+            
+            // Use Web Audio API's scheduling for click-free transitions
+            if (fromGain) {
+                fromGain.gain.cancelScheduledValues(now);
+                fromGain.gain.setValueAtTime(fromGain.gain.value || 1, now);
+                // Use linear ramp to avoid clicks
+                fromGain.gain.linearRampToValueAtTime(0, now + fadeTime);
+            }
+            
+            if (toGain) {
+                toGain.gain.cancelScheduledValues(now);
+                toGain.gain.setValueAtTime(0, now);
+                // Use linear ramp to avoid clicks
+                toGain.gain.linearRampToValueAtTime(1, now + fadeTime);
+            }
         }
 
         function updateNowPlaying() {
@@ -661,6 +655,15 @@ function getPlayerHTML() {
                     verseInfo.textContent = data.book && data.verse ? 
                         \`\${data.book} \${data.verse}\` : 
                         (data.book || 'Sacred Verse');
+                    
+                    // Store metadata in current history item
+                    if (trackHistory[historyIndex]) {
+                        trackHistory[historyIndex].metadata = {
+                            song: data.song || 'Holy Scripture Music',
+                            book: data.book || 'Sacred Verse',
+                            verse: data.verse || ''
+                        };
+                    }
                 })
                 .catch(() => {
                     songTitle.textContent = 'Holy Scripture Music';
@@ -668,7 +671,7 @@ function getPlayerHTML() {
                 });
         }
 
-        function playNewSong(crossfadeEnabled = true) {
+        function playNewSong(crossfadeEnabled = true, specificUrl = null, skipMetadataUpdate = false) {
             // Prevent multiple simultaneous transitions
             if (isTransitioning) {
                 console.log('Transition already in progress, ignoring...');
@@ -678,16 +681,43 @@ function getPlayerHTML() {
             isTransitioning = true;
             console.log('Starting new song transition...');
             
+            // Disable controls during transition
+            prevBtn.disabled = true;
+            nextBtn.disabled = true;
+            prevBtn.classList.add('opacity-50', 'cursor-not-allowed');
+            nextBtn.classList.add('opacity-50', 'cursor-not-allowed');
+            
+            // Show loading state
+            status.textContent = 'Loading next track...';
+            songTitle.classList.add('opacity-50');
+            verseInfo.classList.add('opacity-50');
+            
             initAudioContext();
             
             // Create new audio element
             nextAudio = createAudioElement();
-            nextAudio.src = '/stream?' + Date.now();
+            const streamUrl = specificUrl || '/stream?' + Date.now();
+            nextAudio.src = streamUrl;
             
-            const { gainNode, compressor, limiter, makeupGain } = connectAudioToContext(nextAudio);
+            // Add to history if it's a new track (not from history)
+            if (!specificUrl) {
+                // Trim history to current position when playing new track
+                if (historyIndex < trackHistory.length - 1) {
+                    trackHistory = trackHistory.slice(0, historyIndex + 1);
+                }
+                // Store URL with placeholder for metadata
+                trackHistory.push({
+                    url: streamUrl,
+                    metadata: null // Will be filled when track info is fetched
+                });
+                historyIndex = trackHistory.length - 1;
+                console.log('Added to history. History length:', trackHistory.length, 'Index:', historyIndex);
+            }
+            
+            const { gainNode } = connectAudioToContext(nextAudio);
             nextGain = gainNode;
             
-            console.log('Audio processing chain created with compression and limiting');
+            console.log('Audio connected with clean signal path');
             
             // Set up event listeners for this audio element
             setupAudioListeners(nextAudio);
@@ -710,7 +740,7 @@ function getPlayerHTML() {
                             const oldGain = currentGain;
                             
                             // Start crossfade: both tracks playing, volumes crossfading
-                            crossfade(oldGain, nextGain, 3000);
+                            crossfade(oldGain, nextGain, 1000);
                             
                             // Switch references after starting crossfade
                             currentAudio = nextAudio;
@@ -734,13 +764,35 @@ function getPlayerHTML() {
                         setTimeout(() => {
                             isTransitioning = false;
                             console.log('Transition complete');
+                            
+                            // Re-enable controls
+                            prevBtn.disabled = false;
+                            nextBtn.disabled = false;
+                            prevBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+                            nextBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+                            
+                            // Clear loading state
+                            status.textContent = 'Playing';
+                            songTitle.classList.remove('opacity-50');
+                            verseInfo.classList.remove('opacity-50');
                         }, 500);
                         
-                        updateNowPlaying();
+                        // Only update now playing if not playing from history
+                        if (!skipMetadataUpdate) {
+                            updateNowPlaying();
+                        }
                     }).catch((error) => {
                         console.error('Audio play error:', error);
                         status.textContent = 'Error loading stream';
                         isTransitioning = false;
+                        
+                        // Re-enable controls on error
+                        prevBtn.disabled = false;
+                        nextBtn.disabled = false;
+                        prevBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+                        nextBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+                        songTitle.classList.remove('opacity-50');
+                        verseInfo.classList.remove('opacity-50');
                     });
                 }
             });
@@ -795,25 +847,78 @@ function getPlayerHTML() {
         });
 
         nextBtn.addEventListener('click', () => {
+            // Don't do anything if transitioning
+            if (isTransitioning) {
+                console.log('Transition in progress, ignoring click');
+                return;
+            }
+            
+            // Visual feedback
+            nextBtn.classList.add('scale-95', 'opacity-75');
+            nextBtn.style.background = 'rgba(74, 222, 128, 0.3)';
+            setTimeout(() => {
+                nextBtn.classList.remove('scale-95', 'opacity-75');
+                nextBtn.style.background = '';
+            }, 200);
+            
+            // Forward button - always play a new random track
             if (isPlaying) {
-                playNewSong(true); // Enable crossfade
+                playNewSong(true); // Enable crossfade, no specific URL = random
             } else {
                 playNewSong(false);
             }
         });
 
         prevBtn.addEventListener('click', () => {
-            if (isPlaying) {
-                playNewSong(true); // Enable crossfade
+            // Don't do anything if transitioning
+            if (isTransitioning) {
+                console.log('Transition in progress, ignoring click');
+                return;
+            }
+            
+            // Visual feedback
+            prevBtn.classList.add('scale-95', 'opacity-75');
+            prevBtn.style.background = 'rgba(74, 222, 128, 0.3)';
+            setTimeout(() => {
+                prevBtn.classList.remove('scale-95', 'opacity-75');
+                prevBtn.style.background = '';
+            }, 200);
+            
+            // Backward button - go to previous track in history
+            if (historyIndex > 0) {
+                historyIndex--;
+                const previousTrack = trackHistory[historyIndex];
+                console.log('Going back to track', historyIndex, 'of', trackHistory.length);
+                
+                // Immediately update UI with stored metadata if available
+                if (previousTrack.metadata) {
+                    songTitle.textContent = previousTrack.metadata.song;
+                    verseInfo.textContent = previousTrack.metadata.book && previousTrack.metadata.verse ? 
+                        previousTrack.metadata.book + ' ' + previousTrack.metadata.verse : 
+                        previousTrack.metadata.book;
+                }
+                
+                if (isPlaying) {
+                    playNewSong(true, previousTrack.url, true); // Enable crossfade, specific URL from history, skip metadata update
+                } else {
+                    playNewSong(false, previousTrack.url, true);
+                }
             } else {
-                playNewSong(false);
+                console.log('No previous track in history');
+                // Visual indication that there's no previous track
+                prevBtn.classList.add('animate-pulse');
+                prevBtn.style.background = 'rgba(239, 68, 68, 0.2)';
+                setTimeout(() => {
+                    prevBtn.classList.remove('animate-pulse');
+                    prevBtn.style.background = '';
+                }, 400);
             }
         });
 
         // Set up event listeners for current audio (will be updated when songs change)
         function setupAudioListeners(audio) {
             // Remove any existing listeners to prevent duplicates
-            const events = ['loadedmetadata', 'timeupdate', 'ended', 'error', 'stalled'];
+            const events = ['loadedmetadata', 'timeupdate', 'ended', 'error'];
             events.forEach(event => {
                 const existingListeners = audio.cloneNode ? [] : audio._listeners?.[event] || [];
                 existingListeners.forEach(listener => {
@@ -837,7 +942,7 @@ function getPlayerHTML() {
             audio._listeners.timeupdate = [timeUpdateListener];
 
             const endedListener = () => {
-                console.log('Song ended, checking if we should crossfade...');
+                console.log('Song ended at', audio.currentTime, 'seconds of', audio.duration, 'total');
                 if (isPlaying && !isTransitioning) {
                     console.log('Starting crossfade to next song');
                     playNewSong(true); // Auto-crossfade to next song
@@ -861,17 +966,8 @@ function getPlayerHTML() {
             audio.addEventListener('error', errorListener);
             audio._listeners.error = [errorListener];
 
-            const stalledListener = () => {
-                console.log('Audio stalled, retrying...');
-                if (isPlaying && !isTransitioning) {
-                    setTimeout(() => {
-                        audio.load();
-                        audio.play();
-                    }, 2000);
-                }
-            };
-            audio.addEventListener('stalled', stalledListener);
-            audio._listeners.stalled = [stalledListener];
+            // Removed stalled listener - it was causing premature track switches
+            // The browser will handle buffering automatically
         }
 
         updateNowPlaying();
