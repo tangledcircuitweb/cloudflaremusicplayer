@@ -1,6 +1,51 @@
+async function handleStaticAsset(request, env) {
+  const url = new URL(request.url);
+  const path = url.pathname;
+  
+  // Handle different image requests - serve chirho.png from R2 bucket
+  if (path === '/og-image.jpg' || path === '/twitter-image.jpg' || 
+      path === '/apple-touch-icon.png' || path === '/favicon-32x32.png' || 
+      path === '/favicon-16x16.png' || path === '/favicon.ico') {
+    
+    try {
+      const imageObject = await env.MUSIC_BUCKET.get('chirho.png');
+      if (!imageObject) {
+        return new Response('Image not found', { status: 404 });
+      }
+      
+      // Determine content type based on request
+      let contentType = 'image/png';
+      if (path.includes('.jpg')) {
+        contentType = 'image/jpeg';
+      } else if (path.includes('.ico')) {
+        contentType = 'image/x-icon';
+      }
+      
+      return new Response(imageObject.body, {
+        headers: {
+          'Content-Type': contentType,
+          'Cache-Control': 'public, max-age=31536000',
+          'Access-Control-Allow-Origin': '*'
+        }
+      });
+    } catch (error) {
+      console.error('Error serving image:', error);
+      return new Response('Error serving image', { status: 500 });
+    }
+  }
+  
+  return null; // Not a static asset
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+    
+    // Check for static assets first
+    const staticResponse = await handleStaticAsset(request, env);
+    if (staticResponse) {
+      return staticResponse;
+    }
     
     if (url.pathname === '/stream') {
       return handleStream(env);
@@ -116,6 +161,41 @@ function getPlayerHTML() {
     <title>Epic Scripture - Holy Bible Music Radio</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta charset="UTF-8">
+    
+    <!-- SEO Meta Tags -->
+    <meta name="description" content="Experience the beauty of Scripture through continuous audio streaming of the Psalms. Peaceful, meditative, and spiritually enriching.">
+    <meta name="keywords" content="Bible, Psalms, Scripture, Audio, Christian, Music, Radio, Streaming, Meditation, Prayer">
+    <meta name="author" content="Epic Scripture">
+    <meta name="robots" content="index, follow">
+    <link rel="canonical" href="https://epicscripture.com">
+    
+    <!-- Open Graph Meta Tags -->
+    <meta property="og:title" content="Epic Scripture - Psalms Audio Stream">
+    <meta property="og:description" content="Experience the beauty of Scripture through continuous audio streaming of the Psalms. Peaceful, meditative, and spiritually enriching.">
+    <meta property="og:image" content="https://epicscripture.com/og-image.jpg">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:url" content="https://epicscripture.com">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Epic Scripture">
+    
+    <!-- Twitter Card Meta Tags -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Epic Scripture - Psalms Audio Stream">
+    <meta name="twitter:description" content="Experience the beauty of Scripture through continuous audio streaming of the Psalms. Peaceful, meditative, and spiritually enriching.">
+    <meta name="twitter:image" content="https://epicscripture.com/twitter-image.jpg">
+    
+    <!-- Apple Meta Tags -->
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="Epic Scripture">
+    <link rel="apple-touch-icon" href="https://epicscripture.com/apple-touch-icon.png">
+    
+    <!-- Favicon -->
+    <link rel="icon" type="image/x-icon" href="https://epicscripture.com/favicon.ico">
+    <link rel="icon" type="image/png" sizes="32x32" href="https://epicscripture.com/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="https://epicscripture.com/favicon-16x16.png">
+    
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
@@ -234,9 +314,9 @@ function getPlayerHTML() {
                     <div class="flex items-center space-x-2 text-xs text-gray-600">
                         <span id="currentTime">0:00</span>
                         <div class="flex-1 relative">
-                            <input type="range" id="timeline" min="0" max="100" value="0" 
-                                   class="w-full h-2 bg-white/30 rounded-lg appearance-none glass-button pointer-events-none"
-                                   style="background: linear-gradient(to right, #f59e0b 0%, #f59e0b 0%, rgba(255,255,255,0.3) 0%, rgba(255,255,255,0.3) 100%);">
+                            <div class="w-full h-2 bg-white/30 rounded-lg glass-button relative overflow-hidden">
+                                <div id="progressBar" class="h-full bg-gradient-to-r from-amber-400 to-amber-500 rounded-lg transition-all duration-300" style="width: 0%"></div>
+                            </div>
                         </div>
                         <span id="duration">0:00</span>
                     </div>
@@ -289,7 +369,7 @@ function getPlayerHTML() {
         const playBtn = document.getElementById('playBtn');
         const prevBtn = document.getElementById('prevBtn');
         const nextBtn = document.getElementById('nextBtn');
-        const timeline = document.getElementById('timeline');
+        const timeline = document.getElementById('progressBar');
         const currentTimeEl = document.getElementById('currentTime');
         const durationEl = document.getElementById('duration');
         const playIcon = document.getElementById('playIcon');
@@ -320,8 +400,7 @@ function getPlayerHTML() {
         function updateTimeline() {
             if (currentAudio && !isNaN(currentAudio.duration)) {
                 const progress = (currentAudio.currentTime / currentAudio.duration) * 100;
-                timeline.value = progress;
-                timeline.style.background = 'linear-gradient(to right, #f59e0b ' + progress + '%, rgba(255,255,255,0.3) ' + progress + '%)';
+                timeline.style.width = progress + '%';
                 currentTimeEl.textContent = formatTime(currentAudio.currentTime);
                 durationEl.textContent = formatTime(currentAudio.duration);
             }
@@ -338,18 +417,7 @@ function getPlayerHTML() {
             }
         }
 
-        // Timeline scrubber functionality - disabled for streams, progress only
-        timeline.addEventListener('mousedown', (e) => {
-            // Prevent scrubbing on streamed content
-            e.preventDefault();
-            console.log('Scrubbing disabled for streamed content');
-        });
-
-        timeline.addEventListener('click', (e) => {
-            // Prevent clicking to seek
-            e.preventDefault();
-            console.log('Seeking disabled for streamed content');
-        });
+        // Progress bar is visual only - no interaction
 
         // Initialize Web Audio Context
         function initAudioContext() {
@@ -541,8 +609,7 @@ function getPlayerHTML() {
             status.textContent = 'Press play to Hear The Word of God';
             isPlaying = false;
             stopTimeUpdates();
-            timeline.value = 0;
-            timeline.style.background = 'linear-gradient(to right, #f59e0b 0%, rgba(255,255,255,0.3) 0%)';
+            timeline.style.width = '0%';
             currentTimeEl.textContent = '0:00';
             durationEl.textContent = '0:00';
         }
