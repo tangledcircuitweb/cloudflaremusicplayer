@@ -477,43 +477,45 @@ function getPlayerHTML() {
             }
             
             nextAudio.addEventListener('canplay', () => {
-                if (isPlaying && nextAudio) { // Check nextAudio still exists
+                if (isPlaying && nextAudio) {
                     nextAudio.play().then(() => {
                         if (crossfadeEnabled && currentAudio && currentGain && nextGain) {
-                            // Start crossfade
-                            crossfade(currentGain, nextGain, 3000);
+                            console.log('Starting crossfade: old fading out, new fading in');
                             
-                            // Clean up old audio after fade - more safely
-                            setTimeout(() => {
-                                if (currentAudio && currentAudio !== nextAudio) {
-                                    console.log('Cleaning up old audio after crossfade');
-                                    currentAudio.pause();
-                                    // Don't clear src immediately, let it fade out naturally
-                                    setTimeout(() => {
-                                        if (currentAudio && currentAudio !== playerState.currentAudio) {
-                                            currentAudio.src = '';
-                                        }
-                                    }, 1000);
-                                }
-                            }, 3000);
-                        }
-                        
-                        // Switch references only if nextAudio still exists
-                        if (nextAudio && nextGain) {
+                            // Store old audio reference
+                            const oldAudio = currentAudio;
+                            const oldGain = currentGain;
+                            
+                            // Start crossfade: both tracks playing, volumes crossfading
+                            crossfade(oldGain, nextGain, 3000);
+                            
+                            // Switch references after starting crossfade
+                            currentAudio = nextAudio;
+                            currentGain = nextGain;
+                            nextAudio = null;
+                            nextGain = null;
+                            
+                            // Let old audio fade out naturally - browser will handle cleanup
+                        } else {
+                            // No crossfade - immediate switch
+                            if (currentAudio) {
+                                currentAudio.pause();
+                                currentAudio.src = '';
+                            }
                             currentAudio = nextAudio;
                             currentGain = nextGain;
                             nextAudio = null;
                             nextGain = null;
                         }
                         
-                        // Reset transition flag after everything is set up
                         setTimeout(() => {
                             isTransitioning = false;
                             console.log('Transition complete');
-                        }, 1000);
+                        }, 500);
                         
                         updateNowPlaying();
-                    }).catch(() => {
+                    }).catch((error) => {
+                        console.error('Audio play error:', error);
                         status.textContent = 'Error loading stream';
                         isTransitioning = false;
                     });
