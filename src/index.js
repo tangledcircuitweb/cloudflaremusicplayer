@@ -1271,74 +1271,81 @@ function getPlayerHTML() {
             const protectedRadius = chiRhoSize * 1.8; // Radius of the black circle
             drawChiRho(centerX, centerY, chiRhoSize);
             
-            // Draw 128 individual frequency bars - pure frequency visualization
+            // Draw 3 circles of 128 frequency bars each with rotation
             const bars = 128; // 128 frequency bins across the spectrum
             const barWidth = (Math.PI * 2) / bars;
+            const circles = 3; // 3 concentric circles
             
-            for (let i = 0; i < bars; i++) {
-                // Direct frequency mapping - each bar is a specific frequency
-                const amplitude = dataArray[i] / 255;
+            for (let circle = 0; circle < circles; circle++) {
+                const circleOffset = circle * 0.15; // Spacing between circles
+                const circleOpacity = 1 - (circle * 0.25); // Outer circles more transparent
+                const rotationSpeed = 0.0001 + (circle * 0.00005); // Different rotation speeds
+                const rotationDirection = circle % 2 === 0 ? 1 : -1; // Alternate rotation direction
                 
-                // More visible bar heights - squared for punch, scaled way up
-                const barHeight = (amplitude * amplitude) * maxRadius * 3.5;
-                
-                // Position each frequency bar around the circle
-                const angle = (barWidth * i) - Math.PI / 2; // Start from top
-                
-                // Start just outside the Chi-Rho's black circle
-                const innerRadius = protectedRadius + 5;
-                const x1 = centerX + Math.cos(angle) * innerRadius;
-                const y1 = centerY + Math.sin(angle) * innerRadius;
-                const x2 = centerX + Math.cos(angle) * (innerRadius + barHeight);
-                const y2 = centerY + Math.sin(angle) * (innerRadius + barHeight);
+                for (let i = 0; i < bars; i++) {
+                    // Direct frequency mapping - each bar is a specific frequency
+                    const amplitude = dataArray[i] / 255;
+                    
+                    // More visible bar heights - adjusted for multiple circles
+                    const barHeight = (amplitude * amplitude) * maxRadius * (2.5 - circleOffset * 3);
+                    
+                    // Position each frequency bar with rotation
+                    const angle = (barWidth * i) + (performance.now() * rotationSpeed * rotationDirection);
+                    
+                    // Start from different radii for each circle
+                    const innerRadius = protectedRadius + 5 + (circle * maxRadius * 0.15);
+                    const x1 = centerX + Math.cos(angle) * innerRadius;
+                    const y1 = centerY + Math.sin(angle) * innerRadius;
+                    const x2 = centerX + Math.cos(angle) * (innerRadius + barHeight);
+                    const y2 = centerY + Math.sin(angle) * (innerRadius + barHeight);
                 
                 // Pure fire gradient based on amplitude intensity
                 const gradient = ctx.createLinearGradient(x1, y1, x2, y2);
                 
                 if (amplitude > 0.85) {
                     // Blazing white-blue core
-                    gradient.addColorStop(0, 'rgba(255, 255, 255, 1)');
-                    gradient.addColorStop(0.2, 'rgba(200, 220, 255, 0.9)');
-                    gradient.addColorStop(0.5, 'rgba(255, 255, 200, 0.8)');
-                    gradient.addColorStop(1, 'rgba(255, 220, 0, 0.9)');
+                    gradient.addColorStop(0, 'rgba(255, 255, 255, ' + circleOpacity + ')');
+                    gradient.addColorStop(0.2, 'rgba(200, 220, 255, ' + (circleOpacity * 0.9) + ')');
+                    gradient.addColorStop(0.5, 'rgba(255, 255, 200, ' + (circleOpacity * 0.8) + ')');
+                    gradient.addColorStop(1, 'rgba(255, 220, 0, ' + (circleOpacity * 0.9) + ')');
                 } else if (amplitude > 0.7) {
                     // White-hot
-                    gradient.addColorStop(0, 'rgba(255, 255, 220, 0.9)');
-                    gradient.addColorStop(0.3, 'rgba(255, 255, 150, 0.8)');
-                    gradient.addColorStop(0.6, 'rgba(255, 240, 50, 0.8)');
-                    gradient.addColorStop(1, 'rgba(255, 200, 0, 0.9)');
+                    gradient.addColorStop(0, 'rgba(255, 255, 220, ' + (circleOpacity * 0.9) + ')');
+                    gradient.addColorStop(0.3, 'rgba(255, 255, 150, ' + (circleOpacity * 0.8) + ')');
+                    gradient.addColorStop(0.6, 'rgba(255, 240, 50, ' + (circleOpacity * 0.8) + ')');
+                    gradient.addColorStop(1, 'rgba(255, 200, 0, ' + (circleOpacity * 0.9) + ')');
                 } else if (amplitude > 0.55) {
                     // Yellow-hot
-                    gradient.addColorStop(0, 'rgba(255, 255, 100, 0.8)');
-                    gradient.addColorStop(0.3, 'rgba(255, 230, 0, 0.8)');
-                    gradient.addColorStop(0.7, 'rgba(255, 180, 0, 0.8)');
-                    gradient.addColorStop(1, 'rgba(255, 120, 0, 0.9)');
+                    gradient.addColorStop(0, 'rgba(255, 255, 100, ' + (circleOpacity * 0.8) + ')');
+                    gradient.addColorStop(0.3, 'rgba(255, 230, 0, ' + (circleOpacity * 0.8) + ')');
+                    gradient.addColorStop(0.7, 'rgba(255, 180, 0, ' + (circleOpacity * 0.8) + ')');
+                    gradient.addColorStop(1, 'rgba(255, 120, 0, ' + (circleOpacity * 0.9) + ')');
                 } else if (amplitude > 0.4) {
                     // Orange flames
-                    gradient.addColorStop(0, 'rgba(255, 200, 0, 0.7)');
-                    gradient.addColorStop(0.4, 'rgba(255, 160, 0, 0.7)');
-                    gradient.addColorStop(0.7, 'rgba(255, 100, 0, 0.8)');
-                    gradient.addColorStop(1, 'rgba(240, 60, 0, 0.9)');
+                    gradient.addColorStop(0, 'rgba(255, 200, 0, ' + (circleOpacity * 0.7) + ')');
+                    gradient.addColorStop(0.4, 'rgba(255, 160, 0, ' + (circleOpacity * 0.7) + ')');
+                    gradient.addColorStop(0.7, 'rgba(255, 100, 0, ' + (circleOpacity * 0.8) + ')');
+                    gradient.addColorStop(1, 'rgba(240, 60, 0, ' + (circleOpacity * 0.9) + ')');
                 } else if (amplitude > 0.25) {
                     // Red-orange
-                    gradient.addColorStop(0, 'rgba(255, 130, 0, 0.6)');
-                    gradient.addColorStop(0.4, 'rgba(255, 80, 0, 0.6)');
-                    gradient.addColorStop(0.7, 'rgba(230, 40, 0, 0.7)');
-                    gradient.addColorStop(1, 'rgba(200, 20, 0, 0.8)');
+                    gradient.addColorStop(0, 'rgba(255, 130, 0, ' + (circleOpacity * 0.6) + ')');
+                    gradient.addColorStop(0.4, 'rgba(255, 80, 0, ' + (circleOpacity * 0.6) + ')');
+                    gradient.addColorStop(0.7, 'rgba(230, 40, 0, ' + (circleOpacity * 0.7) + ')');
+                    gradient.addColorStop(1, 'rgba(200, 20, 0, ' + (circleOpacity * 0.8) + ')');
                 } else if (amplitude > 0.1) {
                     // Deep red
-                    gradient.addColorStop(0, 'rgba(220, 60, 0, 0.5)');
-                    gradient.addColorStop(0.5, 'rgba(200, 30, 0, 0.5)');
-                    gradient.addColorStop(1, 'rgba(150, 0, 0, 0.6)');
+                    gradient.addColorStop(0, 'rgba(220, 60, 0, ' + (circleOpacity * 0.5) + ')');
+                    gradient.addColorStop(0.5, 'rgba(200, 30, 0, ' + (circleOpacity * 0.5) + ')');
+                    gradient.addColorStop(1, 'rgba(150, 0, 0, ' + (circleOpacity * 0.6) + ')');
                 } else if (amplitude > 0.02) {
                     // Ember glow
-                    gradient.addColorStop(0, 'rgba(180, 20, 0, 0.3)');
-                    gradient.addColorStop(0.5, 'rgba(140, 0, 0, 0.4)');
-                    gradient.addColorStop(1, 'rgba(100, 0, 0, 0.5)');
+                    gradient.addColorStop(0, 'rgba(180, 20, 0, ' + (circleOpacity * 0.3) + ')');
+                    gradient.addColorStop(0.5, 'rgba(140, 0, 0, ' + (circleOpacity * 0.4) + ')');
+                    gradient.addColorStop(1, 'rgba(100, 0, 0, ' + (circleOpacity * 0.5) + ')');
                 } else {
                     // Nearly invisible
-                    gradient.addColorStop(0, 'rgba(80, 0, 0, 0.1)');
-                    gradient.addColorStop(1, 'rgba(40, 0, 0, 0.2)');
+                    gradient.addColorStop(0, 'rgba(80, 0, 0, ' + (circleOpacity * 0.1) + ')');
+                    gradient.addColorStop(1, 'rgba(40, 0, 0, ' + (circleOpacity * 0.2) + ')');
                 }
                 
                 ctx.strokeStyle = gradient;
@@ -1346,20 +1353,21 @@ function getPlayerHTML() {
                 ctx.lineWidth = Math.max(1.5, (canvas.width / bars) * 0.7);
                 ctx.lineCap = 'round';
                 
-                // Dynamic shadow based on amplitude
-                ctx.shadowBlur = amplitude * 25;
+                // Dynamic shadow based on amplitude and circle
+                ctx.shadowBlur = amplitude * 25 * circleOpacity;
                 if (amplitude > 0.7) {
-                    ctx.shadowColor = 'rgba(255, 255, 100, ' + amplitude + ')';
+                    ctx.shadowColor = 'rgba(255, 255, 100, ' + (amplitude * circleOpacity) + ')';
                 } else if (amplitude > 0.4) {
-                    ctx.shadowColor = 'rgba(255, 150, 0, ' + amplitude + ')';
+                    ctx.shadowColor = 'rgba(255, 150, 0, ' + (amplitude * circleOpacity) + ')';
                 } else {
-                    ctx.shadowColor = 'rgba(200, 50, 0, ' + (amplitude * 0.8) + ')';
+                    ctx.shadowColor = 'rgba(200, 50, 0, ' + (amplitude * circleOpacity * 0.8) + ')';
                 }
                 
-                ctx.beginPath();
-                ctx.moveTo(x1, y1);
-                ctx.lineTo(x2, y2);
-                ctx.stroke();
+                    ctx.beginPath();
+                    ctx.moveTo(x1, y1);
+                    ctx.lineTo(x2, y2);
+                    ctx.stroke();
+                }
             }
             
             // Removed glow effects - pure frequency bars only
