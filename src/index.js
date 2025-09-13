@@ -871,7 +871,14 @@ function getPlayerHTML() {
                             nextAudio = null;
                             nextGain = null;
                             
-                            // Let old audio fade out naturally - browser will handle cleanup
+                            // Clean up old audio after crossfade completes
+                            setTimeout(() => {
+                                if (oldAudio) {
+                                    oldAudio.pause();
+                                    oldAudio.src = '';
+                                    oldAudio.load();
+                                }
+                            }, 1100); // Slightly after crossfade duration
                         } else {
                             // No crossfade - immediate switch
                             if (currentAudio) {
