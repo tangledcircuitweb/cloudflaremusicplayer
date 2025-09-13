@@ -1173,6 +1173,10 @@ function getPlayerHTML() {
         }
         
         function startMinutesCounter() {
+            // Clear any existing interval first to prevent double counting
+            if (minutesCounterInterval) {
+                clearInterval(minutesCounterInterval);
+            }
             // Increment every minute while playing
             minutesCounterInterval = setInterval(incrementMinutesCounter, 60000);
         }
